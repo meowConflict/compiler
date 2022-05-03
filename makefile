@@ -1,7 +1,8 @@
-lex: yacc.y lex.l
-	bison -vdty  yacc.y
-	flex lex.l
-	gcc -o lex y.tab.c lex.yy.c -ly -lfl	
+all:
+	bison --defines='cminus.y.h' --report=all --report-file=cminus.report -o 'cminus.y.c' 'cminus.y'
+	lex -t 'cminus.l' >'cminus.l.c'
+	gcc 'cminus.y.c' 'cminus.l.c' -o 'cminus'
+	./cminus < file
+
 clean:
-	rm lex lex.o y.tab.c lex.yy.c \
-	y.output y.tab.h
+	rm -f *.h *.c cminus cminus.report
