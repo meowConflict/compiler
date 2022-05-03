@@ -1,0 +1,12 @@
+int main(int a)
+{
+    if (a = 1)
+        a = 1;
+    elseif (a = 1)
+    {
+        a = 1;
+    }
+    else
+        a = 1;
+    ;
+}
