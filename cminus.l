@@ -4,6 +4,7 @@
     int yywrap(void)
     {
         return 1;
+        
     }
 
     int yyerror(char *s)
