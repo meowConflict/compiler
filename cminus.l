@@ -4,6 +4,7 @@
     int yywrap(void)
     {
         return 1;
+        
     }
 
     int yyerror(char *s)
@@ -73,6 +74,6 @@ STRINGV     \"(\\.|[^"\\])*\"
 ";"         {return SEMI;}
 
 {COMMENT}   {;}
-[ /n/r/t]   {;}
+[ \n\r\t]   {;}
 .           {printf("ERROR\n");}
 %%
