@@ -1,19 +1,11 @@
 %{
     #include <stdio.h>
+    #include "ast.h"
     #include "cminus.y.h"
-    int yywrap(void)
-    {
-        return 1;
-        
-    }
-
-    int yyerror(char *s)
-    {
-        printf("ERROR: %s\n", yytext);
-        return 0;
-    }
 %}
 
+
+%option noyywrap
 
 COMMENT     \/\*([^\*]|(\*)*[^\*/])*(\*)*\*\/
 ID          [a-zA-Z][a-zA-Z0-9]*
@@ -25,55 +17,56 @@ STRINGV     \"(\\.|[^"\\])*\"
 
 
 %%
-{INTV}      {return INTV;} //remember to change llval
-{FLOATV}    {return FLOATV;}
-{CHARV}     {return CHARV;}
-{STRINGV}   {return STRINGV;}
+{INTV}      {yylval.node = new Node(yytext, "INTV", 0);     return INTV;}
+{FLOATV}    {yylval.node = new Node(yytext, "FLOATV", 0);   return FLOATV;}
+{CHARV}     {yylval.node = new Node(yytext, "CHARV", 0);    return CHARV;}
+{STRINGV}   {yylval.node = new Node(yytext, "STRINGV", 0);  return STRINGV;}
 
-"if"        {return IF;}
-"else"      {return ELSE;}
-"elseif"    {return ELSEIF;}
-"while"     {return WHILE;}
-"for"       {return FOR;}
-"break"     {return BREAK;}
-"continue"  {return CONTINUE;}
-"return"    {return RETURN;}
-"int"       {return INT;}
-"float"     {return FLOAT;}
-"char"      {return CHAR;}
-"void"      {return VOID;}
+"if"        {yylval.node = new Node("", "IF", 0);           return IF;}
+"else"      {yylval.node = new Node("", "ELSE", 0);         return ELSE;}
+"elseif"    {yylval.node = new Node("", "ELSEIF", 0);       return ELSEIF;}
+"while"     {yylval.node = new Node("", "WHILE", 0);        return WHILE;}
+"for"       {yylval.node = new Node("", "FOR", 0);          return FOR;}
+"break"     {yylval.node = new Node("", "BREAK", 0);        return BREAK;}
+"continue"  {yylval.node = new Node("", "CONTINUE", 0);     return CONTINUE;}
+"return"    {yylval.node = new Node("", "RETURN", 0);       return RETURN;}
+"int"       {yylval.node = new Node("", "INT", 0);          return INT;}
+"float"     {yylval.node = new Node("", "FLOAT", 0);        return FLOAT;}
+"char"      {yylval.node = new Node("", "CHAR", 0);         return CHAR;}
+"void"      {yylval.node = new Node("", "VOID", 0);         return VOID;}
 
-{ID}        {return ID;}
+{ID}        {yylval.node = new Node(yytext, "ID", 0);       return ID;}
 
-"="         {return ASSIGN;}
-"+"         {return PLUS;}
-"-"         {return MINUS;}
-"*"         {return STAR;}
-"/"         {return DIV;}
-"%"         {return REM;}
+"="         {yylval.node = new Node("", "ASSIGN", 0);       return ASSIGN;}
+"+"         {yylval.node = new Node("", "PLUS", 0);         return PLUS;}
+"-"         {yylval.node = new Node("", "MINUS", 0);        return MINUS;}
+"*"         {yylval.node = new Node("", "STAR", 0);         return STAR;}
+"/"         {yylval.node = new Node("", "DIV", 0);          return DIV;}
+"%"         {yylval.node = new Node("", "REM", 0);          return REM;}
 
-">"         {return GT;}
-"<"         {return LT;}
-"=="        {return EQUAL;}
-">="        {return GE;}
-"<="        {return LE;}
-"!="        {return NE;}
+">"         {yylval.node = new Node("", "GT", 0);           return GT;}
+"<"         {yylval.node = new Node("", "LT", 0);           return LT;}
+"=="        {yylval.node = new Node("", "EQUAL", 0);        return EQUAL;}
+">="        {yylval.node = new Node("", "GE", 0);           return GE;}
+"<="        {yylval.node = new Node("", "LE", 0);           return LE;}
+"!="        {yylval.node = new Node("", "NE", 0);           return NE;}
 
-"("         {return LEFTP;}
-")"         {return RIGHTP;}
-"["         {return LEFTSB;}
-"]"         {return RIGHTSB;}
-"{"         {return LEFTB;}
-"}"         {return RIGHTB;}
+"("         {yylval.node = new Node("", "LEFTP", 0);        return LEFTP;}
+")"         {yylval.node = new Node("", "RIGHTP", 0);       return RIGHTP;}
+"["         {yylval.node = new Node("", "LEFTSB", 0);       return LEFTSB;}
+"]"         {yylval.node = new Node("", "RIGHTSB", 0);      return RIGHTSB;}
+"{"         {yylval.node = new Node("", "LEFTB", 0);        return LEFTB;}
+"}"         {yylval.node = new Node("", "RIGHTB", 0);       return RIGHTB;}
 
-"&&"        {return AND;}
-"||"        {return OR;}
-"!"         {return NOT;}
+"&"         {yylval.node = new Node("", "AMP", 0);          return AMP;}
+"&&"        {yylval.node = new Node("", "AND", 0);          return AND;}
+"||"        {yylval.node = new Node("", "OR", 0);           return OR;}
+"!"         {yylval.node = new Node("", "NOT", 0);          return NOT;}
 
-","         {return COMMA;}
-";"         {return SEMI;}
+","         {yylval.node = new Node("", "COMMA", 0);        return COMMA;}
+";"         {yylval.node = new Node("", "SEMI", 0);         return SEMI;}
 
 {COMMENT}   {;}
 [ \n\r\t]   {;}
-.           {printf("ERROR\n");}
+.           {printf("ERROR: %s\n", yytext);}
 %%

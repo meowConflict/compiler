@@ -1,146 +1,183 @@
 %{
     #include <stdio.h>
-    int main()
+    #include "ast.h"
+
+    Node *ROOT;
+
+    int yylex(void);
+    int yyparse(void);
+    int yywrap(void);
+    void yyerror(const char *s)
     {
-        yyparse();
+        printf("ERROR: %s\n", s);
     }
 %}
 
 
-%token INTV FLOATV CHARV STRINGV
-%token IF ELSE ELSEIF WHILE FOR BREAK CONTINUE RETURN INT FLOAT CHAR VOID
-%token ID
-%token ASSIGN PLUS MINUS STAR DIV REM
-%token GT LT EQUAL GE LE NE
-%token LEFTP RIGHTP LEFTSB RIGHTSB LEFTB RIGHTB
-%token AND OR NOT
-%token COMMA SEMI
+%union
+{
+    Node* node;
+}
+
+%token <node> INTV FLOATV CHARV STRINGV
+%token <node> IF ELSE ELSEIF WHILE FOR BREAK CONTINUE RETURN INT FLOAT CHAR VOID
+%token <node> ID
+%token <node> ASSIGN PLUS MINUS STAR DIV REM AMP
+%token <node> GT LT EQUAL GE LE NE
+%token <node> LEFTP RIGHTP LEFTSB RIGHTSB LEFTB RIGHTB
+%token <node> AND OR NOT
+%token <node> COMMA SEMI
 
 %right ASSIGN
-%left OR
-%left AND
-%left GT LT EQUAL GE LE NE
-%left PLUS MINUS
-%left STAR DIV REM
+%left  OR
+%left  AND
+%left  GT LT EQUAL GE LE NE
+%left  PLUS MINUS
+%left  STAR DIV REM
 %right NOT
-%left LEFTP RIGHTP LEFTSB RIGHTSB
+%left  LEFTP RIGHTP LEFTSB RIGHTSB
+
+%type <node> program funcList func funcProto paramList param varDec varList varName;
+%type <node> type baseType retBaseType pointerType retType
+%type <node> stmtList statement expStmt compdStmt selStmt eiList elseStmt iterStmt jmpStmt retStmt
+%type <node> expression exprOr exprAnd exprCmp exprAdd exprMul exprUnaryOp factor var call argList CONF
 
 
 %%
-program       : funcList                                                  {printf("program -> funDecList\n");}
+program       : funcList                                                    {$$ = new Node("", "program", 1, $1); ROOT = $$;}
               ;
-funcList      : funcList func
+funcList      : funcList func                                               {$$ = new Node("", "funcList", 2, $1, $2);}
+              | %empty                                                      {$$ = NULL;}
+              ;
+func          : funcProto SEMI                                              {$$ = new Node("", "func", 2, $1, $2);}
+              | funcProto compdStmt                                         {$$ = new Node("", "func", 2, $1, $2);}
+              ;
+funcProto     : retType ID LEFTP paramList RIGHTP                           {$$ = new Node("", "funcProto", 5, $1, $2, $3, $4, $5);}
+              ;
+retType       : retBaseType                                                 {$$ = new Node("", "retType", 1, $1);}
+              | pointerType                                                 {$$ = new Node("", "retType", 1, $1);}
+              ;
+retBaseType   : baseType                                                    {$$ = new Node("", "retBaseType", 1, $1);}
+              | VOID                                                        {$$ = new Node("", "retBaseType", 1, $1);}
+              ;
+baseType      : INT                                                         {$$ = new Node("", "baseType", 1, $1);}
+              | FLOAT                                                       {$$ = new Node("", "baseType", 1, $1);}
+              | CHAR                                                        {$$ = new Node("", "baseType", 1, $1);}
+              ;
+pointerType   : pointerType STAR                                            {$$ = new Node("", "pointerType", 2, $1, $2);}
+              | retBaseType STAR                                            {$$ = new Node("", "pointerType", 2, $1, $2);}
+              ;
+type          : baseType                                                    {$$ = new Node("", "type", 1, $1);}
+              | pointerType                                                 {$$ = new Node("", "type", 1, $1);}
+              ;
+paramList     : paramList COMMA param                                       {$$ = new Node("", "paramList", 3, $1, $2, $3);}
+              | param                                                       {$$ = new Node("", "paramList", 1, $1);}
+              ;
+param         : type varName                                                {$$ = new Node("", "param", 2, $1, $2);}
+              | %empty                                                      {$$ = NULL;}
+              ;
+varName       : ID arrayBrackets                  {$$ = new Node("", "varName", 7, $1, $2, $3, $4, $5, $6, $7);}
+              ;
+arrayBrackets : arrayBrackets LEFTSB INTV RIGHTSB
               | %empty
+compdStmt     : LEFTB stmtList RIGHTB                            {$$ = new Node("", "compdStmt", 4, $1, $2, $3, $4);}
               ;
-func          : funcDec
-              | funcDef
+varDec        : type varList SEMI
               ;
-funcProto     : retType ID LEFTP paramList RIGHTP
+varList       : varList COMMA varInit                                       {$$ = new Node("", "varList", 3, $1, $2, $3);}
+              | varInit                                                     {$$ = new Node("", "varList", 1, $1);}
               ;
-funcDef       : funcProto compdStmt
+varInit       : varName ASSIGN expression
+              | varName ASSIGN arrayInitList
+              | varName
               ;
-funcDec       : funcProto SEMI
+arrayInitList : LEFTB expList RIGHTB
+              | LEFTB RIGHTB
               ;
-baseType      : INT                                                         {printf("type -> INT\n");}
-              | FLOAT                                                       {printf("type -> FLOAT\n");}
-              | CHAR                                                        {printf("type -> CHAR\n");}
+expList       : expList COMMA expression
+              | expression
               ;
-retBaseType       : baseType
-              | VOID                                                        {printf("type -> VOID\n");}
+stmtList      : stmtList statement                                          {$$ = new Node("", "stmtList", 2, $1, $2);}
+              | stmtList varDec
+              | %empty                                                      {$$ = NULL;}
               ;
-pointerType   : pointerType STAR
-              | retBaseType STAR
+statement     : expStmt                                                     {$$ = new Node("", "statement", 1, $1);}
+              | compdStmt                                                   {$$ = new Node("", "statement", 1, $1);}
+              | selStmt                                                     {$$ = new Node("", "statement", 1, $1);}
+              | iterStmt                                                    {$$ = new Node("", "statement", 1, $1);}
+              | jmpStmt                                                     {$$ = new Node("", "statement", 1, $1);}
+              | retStmt                                                     {$$ = new Node("", "statement", 1, $1);}
               ;
-type          : baseType
-              | pointerType
+expStmt       : expression SEMI                                             {$$ = new Node("", "expStmt", 2, $1, $2);}
+              | SEMI                                                        {$$ = new Node("", "expStmt", 1, $1);}
               ;
-retType       : retBaseType
-              | pointerType
+expression    : expression ASSIGN exprOr                                    {$$ = new Node("", "expression", 3, $1, $2, $3);}
+              | exprOr                                                      {$$ = new Node("", "expression", 1, $1);}
               ;
-paramList:      paramList COMMA param                                       {printf("paramList -> paramList COMMA param\n");}
-              | param                                                       {printf("paramList -> param\n");}
+exprOr        : exprOr OR exprAnd                                           {$$ = new Node("", "exprOr", 3, $1, $2, $3);}
+              | exprAnd                                                     {$$ = new Node("", "exprOr", 1, $1);}
               ;
-param         : type varName                                                {printf("param -> type varName\n");}
-              | %empty
+exprAnd       : exprAnd AND exprCmp                                         {$$ = new Node("", "exprAnd", 3, $1, $2, $3);}
+              | exprCmp                                                     {$$ = new Node("", "exprAnd", 1, $1);}
               ;
-varName       : ID                                                          {printf("varName -> ID\n");}
-              | ID LEFTSB INTV RIGHTSB                                      {printf("varName -> ID LEFTSB INTV RIGHTSB\n");}
-              | ID LEFTSB INTV RIGHTSB LEFTSB INTV RIGHTSB                  {printf("varName -> ID LEFTSB INTV RIGHTSB LEFTSB INTV RIGHTSB\n");}
+exprCmp       : exprCmp GE exprAdd                                          {$$ = new Node("", "exprCmp", 3, $1, $2, $3);}
+              | exprCmp LE exprAdd                                          {$$ = new Node("", "exprCmp", 3, $1, $2, $3);}
+              | exprCmp GT exprAdd                                          {$$ = new Node("", "exprCmp", 3, $1, $2, $3);}
+              | exprCmp LT exprAdd                                          {$$ = new Node("", "exprCmp", 3, $1, $2, $3);}
+              | exprCmp EQUAL exprAdd                                       {$$ = new Node("", "exprCmp", 3, $1, $2, $3);}
+              | exprCmp NE exprAdd                                          {$$ = new Node("", "exprCmp", 3, $1, $2, $3);}
+              | exprAdd                                                     {$$ = new Node("", "exprCmp", 1, $1);}
               ;
-compdStmt     : LEFTB varDecList stmtList RIGHTB                            {printf("compdStmt -> LEFTB varDecList stmtList RIGHTB\n");}
+exprAdd       : exprAdd PLUS exprMul                                        {$$ = new Node("", "exprAdd", 3, $1, $2, $3);}
+              | exprAdd MINUS exprMul                                       {$$ = new Node("", "exprAdd", 3, $1, $2, $3);}
+              | exprMul                                                     {$$ = new Node("", "exprAdd", 1, $1);}
               ;
-varDecList    : varDecList varDec                                           {printf("varDecList -> varDecList varDec\n");}
-              | %empty                                                      {printf("varDecList -> %%empty\n");}
+exprMul       : exprMul STAR exprUnaryOp                                    {$$ = new Node("", "exprMul", 3, $1, $2, $3);}
+              | exprMul DIV exprUnaryOp                                     {$$ = new Node("", "exprMul", 3, $1, $2, $3);}
+              | exprMul REM exprUnaryOp                                     {$$ = new Node("", "exprMul", 3, $1, $2, $3);}
+              | exprUnaryOp                                                 {$$ = new Node("", "exprMul", 1, $1);}
+exprUnaryOp   : LEFTP expression RIGHTP                                     {$$ = new Node("", "exprUnaryOp", 3, $1, $2, $3);}
+              | MINUS factor                                                {$$ = new Node("", "exprUnaryOp", 2, $1, $2);}
+              | NOT factor                                                  {$$ = new Node("", "exprUnaryOp", 2, $1, $2);}
+              | STAR factor                                                 {$$ = new Node("", "exprUnaryOp", 2, $1, $2);}
+              | AMP factor                                                  {$$ = new Node("", "exprUnaryOp", 2, $1, $2);}
+              | factor                                                      {$$ = new Node("", "exprUnaryOp", 1, $1);}
               ;
-varDec        : type varList SEMI                                           {printf("varDec -> type varList SEMI\n");}
+factor        : var                                                         {$$ = new Node("", "factor", 1, $1);}
+              | call                                                        {$$ = new Node("", "factor", 1, $1);}
+              | CONF                                                        {$$ = new Node("", "factor", 1, $1);}
               ;
-varList       : varList COMMA varName                                       {printf("varList -> varList COMMA varName");}
-              | varName                                                     {printf("varList -> varName");}
-stmtList:       stmtList statement                                          {printf("stmtList -> stmtList statement\n");}
-              | %empty                                                      {printf("stmtList -> %%empty\n");}
-statement:      expStmt                                                     {printf("statement -> expStmt\n");}
-              | compdStmt                                                   {printf("statement -> compdStmt\n");}
-              | selStmt                                                     {printf("statement -> selStmt\n");}
-              | iterStmt                                                    {printf("statement -> iterStmt\n");}
-              | jmpStmt                                                     {printf("statement -> jmpStmt\n");}
-              | retStmt                                                     {printf("statement -> retStmt\n");}
-expStmt       : experssion SEMI                                             {printf("expStmt -> expression SEMI\n");}
-              | SEMI                                                        {printf("expStmt -> SEMI\n");}
-
-
-experssion    : experssion ASSIGN expr_or {}
-              | expr_or {}
+var           : ID                                                          {$$ = new Node("", "var", 1, $1);}
+              | ID LEFTSB expression RIGHTSB                                {$$ = new Node("", "var", 4, $1, $2, $3, $4);}
+              | ID LEFTSB expression RIGHTSB LEFTSB expression RIGHTSB      {$$ = new Node("", "var", 7, $1, $2, $3, $4, $5, $6, $7);}
               ;
-expr_or       : expr_or OR expr_and {}
-              | expr_and{}
+call          : ID LEFTP argList RIGHTP                                     {$$ = new Node("", "call", 4, $1, $2, $3, $4);}
+              | ID LEFTP RIGHTP                                             {$$ = new Node("", "call", 3, $1, $2, $3);}
               ;
-expr_and      : expr_and AND expr_compare {}
-              | expr_compare{}
+argList       : argList COMMA expression                                    {$$ = new Node("", "argList", 3, $1, $2, $3);}
+              | expression                                                  {$$ = new Node("", "argList", 1, $1);}
               ;
-expr_compare  :     expr_compare GE expr_add {}
-              | expr_compare LE expr_add {}
-              | expr_compare GT expr_add {}
-              | expr_compare LT expr_add {}
-              | expr_compare EQUAL expr_add {}
-              | expr_compare NE expr_add {}
-              | expr_add{}
+CONF          : INTV                                                        {$$ = new Node("", "CONF", 1, $1);}
+              | FLOATV                                                      {$$ = new Node("", "CONF", 1, $1);}
+              | CHARV                                                       {$$ = new Node("", "CONF", 1, $1);}
+              | STRINGV                                                     {$$ = new Node("", "CONF", 1, $1);}
               ;
-expr_add      :     expr_add PLUS expr_mul {}
-              | expr_add MINUS expr_mul {}
-              | expr_mul {}
+selStmt       : IF LEFTP expression RIGHTP statement eiList elseStmt SEMI   {$$ = new Node("", "selStmt", 8, $1, $2, $3, $4, $5, $6, $7, $8);}
               ;
-expr_mul      :     expr_mul STAR factor {}
-              | expr_mul DIV factor {}
-              | expr_mul REM factor {}
-              | LEFTP experssion RIGHTP {}
-              | MINUS factor {}
-              | NOT  factor{}
-              | factor {}
-factor        : var                                                         {printf("factor -> var\n");}
-              | call                                                        {printf("factor -> call\n");}
-              | CONF                                                        {printf("factor -> CONF\n");}
-var           : ID                                                          {printf("var -> ID\n");}
-              | ID LEFTSB experssion RIGHTSB                                {printf("var -> ID LEFTSB experssion RIGHTSB\n");}
-              | ID LEFTSB experssion RIGHTSB LEFTSB experssion RIGHTSB      {printf("var -> ID LEFTSB experssion RIGHTSB LEFTSB experssion RIGHTSB\n");}
-call          : ID LEFTP argList RIGHTP                                     {printf("call -> ID LEFTP argList RIGHTP\n");}
-              | ID LEFTP RIGHTP                                             {printf("call -> ID LEFTP RIGHTP\n");}
-argList       : argList COMMA experssion                                    {printf("argList -> argList COMMA experssion\n");}
-              | experssion                                                  {printf("argList -> experssion\n");}
-CONF          : INTV                                                        {printf("CONF -> INTV\n");}
-              | FLOATV                                                      {printf("CONF -> FLOATV\n");}
-              | CHARV                                                       {printf("CONF -> CHARV\n");}
-              | STRINGV                                                     {printf("CONF -> STRINGV\n");}
-selStmt       : ifStmt eList SEMI                                           {}
-ifStmt        : IF LEFTP experssion RIGHTP statement                        {}
-eList         : eiList elseStmt                                             {}
-eiList        : eiList eiStmt                                               {}
-              | %empty                                                      {}
-eiStmt        : ELSEIF LEFTP experssion RIGHTP statement                    {}
-elseStmt      : ELSE statement                                              {}
-              | %empty                                                      {}
-iterStmt      : FOR LEFTP expStmt expStmt experssion RIGHTP statement       {printf("iterStmt -> FOR LEFTP expStmt expStmt experssion RIGHTP statement\n");}
-              | WHILE LEFTP experssion RIGHTP statement                     {printf("iterStmt -> WHILE LEFTP experssion RIGHTP statement\n");}
-jmpStmt       : BREAK SEMI                                                  {printf("jmpStmt -> BREAK SEMI\n");}
-              | CONTINUE SEMI                                               {printf("jmpStmt -> CONTINUE SEMI\n");}
-retStmt       : RETURN SEMI                                                 {printf("retStmt -> RETURN SEMI\n");}
-              | RETURN experssion SEMI       
+eiList        : eiList ELSEIF LEFTP expression RIGHTP statement             {$$ = new Node("", "eiList", 6, $1, $2, $3, $4, $5, $6);}
+              | %empty                                                      {$$ = NULL;}
+              ;
+elseStmt      : ELSE statement                                              {$$ = new Node("", "elseStmt", 2, $1, $2);}
+              | %empty                                                      {$$ = NULL;}
+              ;
+iterStmt      : FOR LEFTP expStmt expStmt expression RIGHTP statement       {$$ = new Node("", "iterStmt", 7, $1, $2, $3, $4, $5, $6, $7);}
+              | WHILE LEFTP expression RIGHTP statement                     {$$ = new Node("", "iterStmt", 5, $1, $2, $3, $4, $5);}
+              ;
+jmpStmt       : BREAK SEMI                                                  {$$ = new Node("", "jmpStmt", 2, $1, $2);}
+              | CONTINUE SEMI                                               {$$ = new Node("", "jmpStmt", 2, $1, $2);}
+              ;
+retStmt       : RETURN SEMI                                                 {$$ = new Node("", "retStmt", 2, $1, $2);}
+              | RETURN expression SEMI                                      {$$ = new Node("", "retStmt", 3, $1, $2, $3);}
+              ;
+%%
+//expression 不能为空，导致for语句最后一项一定要有内容，哪怕是a=a

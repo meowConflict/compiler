@@ -1,6 +1,14 @@
+<<<<<<< HEAD
 cminus
 cminus.l.c
 cminus.y.c
 cminus.y.h
 cminus.report
 makefile
+=======
+cminus
+cminus.l.c
+cminus.y.c
+cminus.y.h
+cminus.report
+>>>>>>> refs/remotes/origin/master
