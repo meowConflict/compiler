@@ -2,8 +2,6 @@
     #include <stdio.h>
     #include "ast.h"
 
-    Node *ROOT;
-
     int yylex(void);
     int yyparse(void);
     int yywrap(void);
@@ -11,22 +9,19 @@
     {
         printf("ERROR: %s\n", s);
     }
+    int main() {
+        yyparse();
+    }
 %}
 
-
-%union
-{
-    Node* node;
-}
-
-%token <node> INTV FLOATV CHARV STRINGV
-%token <node> IF ELSE ELSEIF WHILE FOR BREAK CONTINUE RETURN INT FLOAT CHAR VOID
-%token <node> ID
-%token <node> ASSIGN PLUS MINUS STAR DIV REM AMP
-%token <node> GT LT EQUAL GE LE NE
-%token <node> LEFTP RIGHTP LEFTSB RIGHTSB LEFTB RIGHTB
-%token <node> AND OR NOT
-%token <node> COMMA SEMI
+%token INTV FLOATV CHARV STRINGV
+%token IF ELSE WHILE FOR BREAK CONTINUE RETURN INT FLOAT CHAR VOID
+%token ID
+%token ASSIGN PLUS MINUS STAR DIV REM AMP
+%token GT LT EQUAL GE LE NE
+%token LEFTP RIGHTP LEFTSB RIGHTSB LEFTB RIGHTB
+%token AND OR NOT
+%token COMMA SEMI
 
 %right ASSIGN
 %left  OR
@@ -34,58 +29,54 @@
 %left  GT LT EQUAL GE LE NE
 %left  PLUS MINUS
 %left  STAR DIV REM
-%right NOT
+%right NOT USTAR UMINUS
 %left  LEFTP RIGHTP LEFTSB RIGHTSB
 
-%type <node> program funcList func funcProto paramList param varDec varList varName;
-%type <node> type baseType retBaseType pointerType retType
-%type <node> stmtList statement expStmt compdStmt selStmt eiList elseStmt iterStmt jmpStmt retStmt
-%type <node> expression exprOr exprAnd exprCmp exprAdd exprMul exprUnaryOp factor var call argList CONF
 
 
 %%
-program       : funcList                                                    {$$ = new Node("", "program", 1, $1); ROOT = $$;}
+program       : funcList                     
               ;
-funcList      : funcList func                                               {$$ = new Node("", "funcList", 2, $1, $2);}
-              | %empty                                                      {$$ = NULL;}
+funcList      : funcList func                      
+              | %empty                                           
               ;
-func          : funcProto SEMI                                              {$$ = new Node("", "func", 2, $1, $2);}
-              | funcProto compdStmt                                         {$$ = new Node("", "func", 2, $1, $2);}
+func          : funcProto SEMI                                       
+              | funcProto compdStmt                                  
               ;
-funcProto     : retType ID LEFTP paramList RIGHTP                           {$$ = new Node("", "funcProto", 5, $1, $2, $3, $4, $5);}
+funcProto     : retType ID LEFTP paramList RIGHTP                    
               ;
-retType       : retBaseType                                                 {$$ = new Node("", "retType", 1, $1);}
-              | pointerType                                                 {$$ = new Node("", "retType", 1, $1);}
+retType       : retBaseType                                     
+              | pointerType                                     
               ;
-retBaseType   : baseType                                                    {$$ = new Node("", "retBaseType", 1, $1);}
-              | VOID                                                        {$$ = new Node("", "retBaseType", 1, $1);}
+retBaseType   : baseType                                      
+              | VOID                                            
               ;
-baseType      : INT                                                         {$$ = new Node("", "baseType", 1, $1);}
-              | FLOAT                                                       {$$ = new Node("", "baseType", 1, $1);}
-              | CHAR                                                        {$$ = new Node("", "baseType", 1, $1);}
+baseType      : INT                                           
+              | FLOAT                                         
+              | CHAR                                          
               ;
-pointerType   : pointerType STAR                                            {$$ = new Node("", "pointerType", 2, $1, $2);}
-              | retBaseType STAR                                            {$$ = new Node("", "pointerType", 2, $1, $2);}
+pointerType   : pointerType STAR                                  
+              | retBaseType STAR                                  
               ;
-type          : baseType                                                    {$$ = new Node("", "type", 1, $1);}
-              | pointerType                                                 {$$ = new Node("", "type", 1, $1);}
+type          : baseType                                                
+              | pointerType                                             
               ;
-paramList     : paramList COMMA param                                       {$$ = new Node("", "paramList", 3, $1, $2, $3);}
-              | param                                                       {$$ = new Node("", "paramList", 1, $1);}
+paramList     : paramList COMMA param                
+              | param                                
               ;
-param         : type varName                                                {$$ = new Node("", "param", 2, $1, $2);}
-              | %empty                                                      {$$ = NULL;}
+param         : type varName                                      
+              | %empty                                            
               ;
-varName       : ID arrayBrackets                  {$$ = new Node("", "varName", 7, $1, $2, $3, $4, $5, $6, $7);}
+varName       : ID arrayBrackets        
               ;
 arrayBrackets : arrayBrackets LEFTSB INTV RIGHTSB
               | %empty
-compdStmt     : LEFTB stmtList RIGHTB                            {$$ = new Node("", "compdStmt", 4, $1, $2, $3, $4);}
+compdStmt     : LEFTB stmtList RIGHTB                      
               ;
 varDec        : type varList SEMI
               ;
-varList       : varList COMMA varInit                                       {$$ = new Node("", "varList", 3, $1, $2, $3);}
-              | varInit                                                     {$$ = new Node("", "varList", 1, $1);}
+varList       : varList COMMA varInit                      
+              | varInit                                                    
               ;
 varInit       : varName ASSIGN expression
               | varName ASSIGN arrayInitList
@@ -97,87 +88,87 @@ arrayInitList : LEFTB expList RIGHTB
 expList       : expList COMMA expression
               | expression
               ;
-stmtList      : stmtList statement                                          {$$ = new Node("", "stmtList", 2, $1, $2);}
+stmtList      : stmtList statement                                          
               | stmtList varDec
-              | %empty                                                      {$$ = NULL;}
+              | %empty                                                      
               ;
-statement     : expStmt                                                     {$$ = new Node("", "statement", 1, $1);}
-              | compdStmt                                                   {$$ = new Node("", "statement", 1, $1);}
-              | selStmt                                                     {$$ = new Node("", "statement", 1, $1);}
-              | iterStmt                                                    {$$ = new Node("", "statement", 1, $1);}
-              | jmpStmt                                                     {$$ = new Node("", "statement", 1, $1);}
-              | retStmt                                                     {$$ = new Node("", "statement", 1, $1);}
+statement     : expStmt                                                     
+              | compdStmt                                                   
+              | selStmt                                                     
+              | iterStmt                                                    
+              | jmpStmt                                                     
+              | retStmt                                                     
               ;
-expStmt       : expression SEMI                                             {$$ = new Node("", "expStmt", 2, $1, $2);}
-              | SEMI                                                        {$$ = new Node("", "expStmt", 1, $1);}
+expStmt       : expression SEMI                                             
+              | SEMI                                                       
               ;
-expression    : expression ASSIGN exprOr                                    {$$ = new Node("", "expression", 3, $1, $2, $3);}
-              | exprOr                                                      {$$ = new Node("", "expression", 1, $1);}
+expression    : expression ASSIGN exprOr                                    
+              | exprOr                                                      
               ;
-exprOr        : exprOr OR exprAnd                                           {$$ = new Node("", "exprOr", 3, $1, $2, $3);}
-              | exprAnd                                                     {$$ = new Node("", "exprOr", 1, $1);}
+exprOr        : exprOr OR exprAnd                                           
+              | exprAnd                                                     
               ;
-exprAnd       : exprAnd AND exprCmp                                         {$$ = new Node("", "exprAnd", 3, $1, $2, $3);}
-              | exprCmp                                                     {$$ = new Node("", "exprAnd", 1, $1);}
+exprAnd       : exprAnd AND exprCmp                                         
+              | exprCmp                                                     
               ;
-exprCmp       : exprCmp GE exprAdd                                          {$$ = new Node("", "exprCmp", 3, $1, $2, $3);}
-              | exprCmp LE exprAdd                                          {$$ = new Node("", "exprCmp", 3, $1, $2, $3);}
-              | exprCmp GT exprAdd                                          {$$ = new Node("", "exprCmp", 3, $1, $2, $3);}
-              | exprCmp LT exprAdd                                          {$$ = new Node("", "exprCmp", 3, $1, $2, $3);}
-              | exprCmp EQUAL exprAdd                                       {$$ = new Node("", "exprCmp", 3, $1, $2, $3);}
-              | exprCmp NE exprAdd                                          {$$ = new Node("", "exprCmp", 3, $1, $2, $3);}
-              | exprAdd                                                     {$$ = new Node("", "exprCmp", 1, $1);}
+exprCmp       : exprCmp GE exprAdd                                          
+              | exprCmp LE exprAdd                                          
+              | exprCmp GT exprAdd                                          
+              | exprCmp LT exprAdd                                          
+              | exprCmp EQUAL exprAdd                                       
+              | exprCmp NE exprAdd                                          
+              | exprAdd                                                     
               ;
-exprAdd       : exprAdd PLUS exprMul                                        {$$ = new Node("", "exprAdd", 3, $1, $2, $3);}
-              | exprAdd MINUS exprMul                                       {$$ = new Node("", "exprAdd", 3, $1, $2, $3);}
-              | exprMul                                                     {$$ = new Node("", "exprAdd", 1, $1);}
+exprAdd       : exprAdd PLUS exprMul                                        
+              | exprAdd MINUS exprMul                                       
+              | exprMul                                                     
               ;
-exprMul       : exprMul STAR exprUnaryOp                                    {$$ = new Node("", "exprMul", 3, $1, $2, $3);}
-              | exprMul DIV exprUnaryOp                                     {$$ = new Node("", "exprMul", 3, $1, $2, $3);}
-              | exprMul REM exprUnaryOp                                     {$$ = new Node("", "exprMul", 3, $1, $2, $3);}
-              | exprUnaryOp                                                 {$$ = new Node("", "exprMul", 1, $1);}
-exprUnaryOp   : LEFTP expression RIGHTP                                     {$$ = new Node("", "exprUnaryOp", 3, $1, $2, $3);}
-              | MINUS factor                                                {$$ = new Node("", "exprUnaryOp", 2, $1, $2);}
-              | NOT factor                                                  {$$ = new Node("", "exprUnaryOp", 2, $1, $2);}
-              | STAR factor                                                 {$$ = new Node("", "exprUnaryOp", 2, $1, $2);}
-              | AMP factor                                                  {$$ = new Node("", "exprUnaryOp", 2, $1, $2);}
-              | factor                                                      {$$ = new Node("", "exprUnaryOp", 1, $1);}
+exprMul       : exprMul STAR exprUnaryOp                  
+              | exprMul DIV exprUnaryOp                   
+              | exprMul REM exprUnaryOp                   
+              | exprUnaryOp                              
+exprUnaryOp   : LEFTP expression RIGHTP                  
+              | MINUS factor %prec UMINUS                            
+              | NOT factor                               
+              | STAR factor %prec USTAR                             
+              | AMP factor                               
+              | factor                                                      
               ;
-factor        : var                                                         {$$ = new Node("", "factor", 1, $1);}
-              | call                                                        {$$ = new Node("", "factor", 1, $1);}
-              | CONF                                                        {$$ = new Node("", "factor", 1, $1);}
+factor        : var                                                         
+              | call                                                        
+              | CONF                                                        
               ;
-var           : ID                                                          {$$ = new Node("", "var", 1, $1);}
-              | ID LEFTSB expression RIGHTSB                                {$$ = new Node("", "var", 4, $1, $2, $3, $4);}
-              | ID LEFTSB expression RIGHTSB LEFTSB expression RIGHTSB      {$$ = new Node("", "var", 7, $1, $2, $3, $4, $5, $6, $7);}
+var           : ID subscript  
               ;
-call          : ID LEFTP argList RIGHTP                                     {$$ = new Node("", "call", 4, $1, $2, $3, $4);}
-              | ID LEFTP RIGHTP                                             {$$ = new Node("", "call", 3, $1, $2, $3);}
+subscript     : subscript LEFTSB expression RIGHTSB
+              | %empty
+call          : ID LEFTP argList RIGHTP                                     
+              | ID LEFTP RIGHTP                                             
               ;
-argList       : argList COMMA expression                                    {$$ = new Node("", "argList", 3, $1, $2, $3);}
-              | expression                                                  {$$ = new Node("", "argList", 1, $1);}
+argList       : argList COMMA expression                                    
+              | expression                                                  
               ;
-CONF          : INTV                                                        {$$ = new Node("", "CONF", 1, $1);}
-              | FLOATV                                                      {$$ = new Node("", "CONF", 1, $1);}
-              | CHARV                                                       {$$ = new Node("", "CONF", 1, $1);}
-              | STRINGV                                                     {$$ = new Node("", "CONF", 1, $1);}
+CONF          : INTV                                                        
+              | FLOATV                                                      
+              | CHARV                                                       
+              | STRINGV                                                     
               ;
-selStmt       : IF LEFTP expression RIGHTP statement eiList elseStmt SEMI   {$$ = new Node("", "selStmt", 8, $1, $2, $3, $4, $5, $6, $7, $8);}
+selStmt       : IF LEFTP expression RIGHTP statement elseStmt SEMI   
               ;
-eiList        : eiList ELSEIF LEFTP expression RIGHTP statement             {$$ = new Node("", "eiList", 6, $1, $2, $3, $4, $5, $6);}
-              | %empty                                                      {$$ = NULL;}
+elseStmt      : ELSE statement                                             
+              | %empty                                                     
               ;
-elseStmt      : ELSE statement                                              {$$ = new Node("", "elseStmt", 2, $1, $2);}
-              | %empty                                                      {$$ = NULL;}
+iterStmt      : FOR LEFTP expStmt expStmt incStmt RIGHTP statement    
+              | WHILE LEFTP expression RIGHTP statement                  
               ;
-iterStmt      : FOR LEFTP expStmt expStmt expression RIGHTP statement       {$$ = new Node("", "iterStmt", 7, $1, $2, $3, $4, $5, $6, $7);}
-              | WHILE LEFTP expression RIGHTP statement                     {$$ = new Node("", "iterStmt", 5, $1, $2, $3, $4, $5);}
+incStmt       : expression
+              | %empty
               ;
-jmpStmt       : BREAK SEMI                                                  {$$ = new Node("", "jmpStmt", 2, $1, $2);}
-              | CONTINUE SEMI                                               {$$ = new Node("", "jmpStmt", 2, $1, $2);}
+jmpStmt       : BREAK SEMI                                                 
+              | CONTINUE SEMI                                              
               ;
-retStmt       : RETURN SEMI                                                 {$$ = new Node("", "retStmt", 2, $1, $2);}
-              | RETURN expression SEMI                                      {$$ = new Node("", "retStmt", 3, $1, $2, $3);}
+retStmt       : RETURN SEMI                                              
+              | RETURN expression SEMI                                   
               ;
 %%
 //expression 不能为空，导致for语句最后一项一定要有内容，哪怕是a=a
