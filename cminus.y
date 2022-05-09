@@ -1,6 +1,6 @@
 %{
     #include <stdio.h>
-    #include "ast.h"
+    #include "ast.hpp"
 
     int yylex(void);
     int yyparse(void);
@@ -88,16 +88,16 @@ arrayInitList : LEFTB expList RIGHTB
 expList       : expList COMMA expression
               | expression
               ;
-stmtList      : stmtList statement                                          
-              | stmtList varDec
-              | %empty                                                      
+stmtList      : stmtList statement
+              | %empty
               ;
-statement     : expStmt                                                     
+statement     : expStmt
               | compdStmt                                                   
               | selStmt                                                     
               | iterStmt                                                    
               | jmpStmt                                                     
-              | retStmt                                                     
+              | retStmt
+              | varDec
               ;
 expStmt       : expression SEMI                                             
               | SEMI                                                       
@@ -108,12 +108,12 @@ expression    : expression ASSIGN exprOr
 exprOr        : exprOr OR exprAnd                                           
               | exprAnd                                                     
               ;
-exprAnd       : exprAnd AND exprCmp                                         
-              | exprCmp                                                     
+exprAnd       : exprAnd AND exprCmp
+              | exprCmp
               ;
 exprCmp       : exprCmp GE exprAdd                                          
               | exprCmp LE exprAdd                                          
-              | exprCmp GT exprAdd                                          
+              | exprCmp GT exprAdd
               | exprCmp LT exprAdd                                          
               | exprCmp EQUAL exprAdd                                       
               | exprCmp NE exprAdd                                          
@@ -158,11 +158,14 @@ selStmt       : IF LEFTP expression RIGHTP statement elseStmt SEMI
 elseStmt      : ELSE statement                                             
               | %empty                                                     
               ;
-iterStmt      : FOR LEFTP expStmt expStmt incStmt RIGHTP statement    
+iterStmt      : FOR LEFTP expStmt expStmt stepStmt RIGHTP statement    
               | WHILE LEFTP expression RIGHTP statement                  
               ;
-incStmt       : expression
+stepStmt      : singleStepStmt
               | %empty
+              ;
+singleStepStmt: singleStepStmt COMMA expression
+              | expression
               ;
 jmpStmt       : BREAK SEMI                                                 
               | CONTINUE SEMI                                              
