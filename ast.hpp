@@ -22,10 +22,19 @@
 #include <json/json.h>
 
 namespace lyf {
-    enum VarType {
+    enum BaseType {
         INT,
         FLOAT,
-        CHAR
+        CHAR,
+        VOID
+    };
+    struct VarType {
+        BaseType type;
+        std::vector<int> dim;
+        VarType(BaseType type, std::vector<int> dim)
+                : type(type), dim(std::move(dim)) {}
+        VarType(const VarType &rhs): type(rhs.type) ,dim(rhs.dim) {}
+        VarType(VarType &&rhs): type(rhs.type), dim(std::move(rhs.dim)) {}
     };
 
     class ASTNode {
@@ -55,12 +64,11 @@ namespace lyf {
 
     class VarExprNode: public ExprNode {
     private:
+        VarType var;
         std::string name;
-        VarType type;
-        int pLevel;
     public:
-        VarExprNode(const std::string &name, VarType type, int pLevel)
-                : name(name), type(type), pLevel(pLevel) {}
+        VarExprNode(VarType var, std::string name)
+                : var(std::move(var)), name(name) {}
         llvm::Value *codeGen() override;
     };
 

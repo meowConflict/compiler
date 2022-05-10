@@ -35,34 +35,34 @@
 
 
 %%
-program       : funcList                     
+program       : funcList 
               ;
-funcList      : funcList func                      
-              | %empty                                           
+funcList      : funcList func 
+              | %empty
               ;
-func          : funcProto SEMI                                       
-              | funcProto compdStmt                                  
+func          : funcProto SEMI 
+              | funcProto compdStmt
               ;
 funcProto     : retType ID LEFTP paramList RIGHTP                    
               ;
 retType       : retBaseType                                     
               | pointerType                                     
               ;
-retBaseType   : baseType                                      
+retBaseType   : baseType
               | VOID                                            
               ;
 baseType      : INT                                           
               | FLOAT                                         
               | CHAR                                          
               ;
-pointerType   : pointerType STAR                                  
-              | retBaseType STAR                                  
+pointerType   : pointerType STAR 
+              | retBaseType STAR 
               ;
-type          : baseType                                                
+type          : baseType
               | pointerType                                             
               ;
-paramList     : paramList COMMA param                
-              | param                                
+paramList     : paramList COMMA param 
+              | param 
               ;
 param         : type varName                                      
               | %empty                                            
@@ -131,17 +131,16 @@ exprUnaryOp   : LEFTP expression RIGHTP
               | MINUS factor %prec UMINUS                            
               | NOT factor                               
               | STAR factor %prec USTAR                             
-              | AMP factor                               
+              | AMP factor 
               | factor                                                      
               ;
 factor        : var                                                         
               | call                                                        
               | CONF                                                        
               ;
-var           : ID subscript  
+var           : var LEFTSB expression RIGHTSB
+              | ID
               ;
-subscript     : subscript LEFTSB expression RIGHTSB
-              | %empty
 call          : ID LEFTP argList RIGHTP                                     
               | ID LEFTP RIGHTP                                             
               ;
@@ -153,10 +152,9 @@ CONF          : INTV
               | CHARV                                                       
               | STRINGV                                                     
               ;
-selStmt       : IF LEFTP expression RIGHTP statement elseStmt SEMI   
-              ;
-elseStmt      : ELSE statement                                             
-              | %empty                                                     
+selStmt       : IF LEFTP expression RIGHTP compdStmt ELSE compdStmt
+              | IF LEFTP expression RIGHTP compdStmt
+              | IF LEFTP expression RIGHTP selStmt
               ;
 iterStmt      : FOR LEFTP expStmt expStmt stepStmt RIGHTP statement    
               | WHILE LEFTP expression RIGHTP statement                  
