@@ -65,7 +65,7 @@ namespace lyf {
     class ArrayInitExpr: public ExprNode {
         std::vector<std::unique_ptr<ExprNode>> items;
     public:
-        ArrayInitExpr(std::vector<std::unique_ptr<ExprNode>> items): items(std::move(items)) {}
+        ArrayInitExpr(std::vector<std::unique_ptr<ExprNode>> items, VarType type): items(std::move(items)), ExprNode(std::move(type)) {}
         llvm::Value *codeGen() override;
         Json::Value jsonGen() override;
     };
@@ -128,7 +128,7 @@ namespace lyf {
     class ConstExprNode: public ExprNode {
     protected:
         T value;
-        ConstExprNode(T v, const VarType &type): value(v), ExprNode(std::move(type)) {}
+        ConstExprNode(T v, VarType type): value(v), ExprNode(std::move(type)) {}
     };
 
     class ConstIntNode: public ConstExprNode<long> {
