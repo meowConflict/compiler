@@ -127,14 +127,14 @@ exprMul       : exprMul STAR exprUnaryOp
               | exprMul DIV exprUnaryOp                   
               | exprMul REM exprUnaryOp                   
               | exprUnaryOp                              
-exprUnaryOp   : LEFTP expression RIGHTP                  
-              | MINUS factor %prec UMINUS                            
+exprUnaryOp   : MINUS factor %prec UMINUS                            
               | NOT factor                               
               | STAR factor %prec USTAR                             
               | AMP factor 
               | factor                                                      
               ;
-factor        : var                                                         
+factor        : LEFTP expression RIGHTP                  
+              | var                                                         
               | call                                                        
               | CONF                                                        
               ;
