@@ -1,7 +1,9 @@
 %{
     #include <stdio.h>
     #include "ast.hpp"
+    #define YYSTYPE std::shared_ptr<lyf::ASTNode>
     #include "cminus.y.h"
+    std::string lex_text;
 %}
 
 
@@ -17,10 +19,10 @@ STRINGV     \"(\\.|[^"\\])*\"
 
 
 %%
-{INTV}      {return INTV;}
-{FLOATV}    {return FLOATV;}
-{CHARV}     {return CHARV;}
-{STRINGV}   {return STRINGV;}
+{INTV}      {lex_text = yytext; return INTV;}
+{FLOATV}    {lex_text = yytext; return FLOATV;}
+{CHARV}     {lex_text = yytext; return CHARV;}
+{STRINGV}   {lex_text = yytext; return STRINGV;}
 
 "if"        {return IF;}
 "else"      {return ELSE;}
@@ -34,7 +36,7 @@ STRINGV     \"(\\.|[^"\\])*\"
 "char"      {return CHAR;}
 "void"      {return VOID;}
 
-{ID}        {return ID;}
+{ID}        {lex_text = yytext; return ID;}
 
 "="         {return ASSIGN;}
 "+"         {return PLUS;}
