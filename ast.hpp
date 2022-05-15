@@ -29,20 +29,22 @@ namespace lyf {
         VOID
     };
 
-    struct VarType {
+    class ASTNode {
+    public:
+        virtual llvm::Value *codeGen() = 0;
+        virtual Json::Value jsonGen() = 0;
+        virtual ~ASTNode() = default;
+    };
+
+    struct VarType: public ASTNode {
         BaseType type;
         std::vector<int> dim;
         VarType(BaseType type, std::vector<int> dim)
                 : type(type), dim(std::move(dim)) {}
         VarType(const VarType &rhs): type(rhs.type) ,dim(rhs.dim) {}
         VarType(VarType &&rhs): type(rhs.type), dim(std::move(rhs.dim)) {}
-    };
-
-    class ASTNode {
-    public:
-        virtual llvm::Value *codeGen() = 0;
-        virtual Json::Value jsonGen() = 0;
-        virtual ~ASTNode() = default;
+        llvm::Value *codeGen() override;
+        Json::Value jsonGen() override;
     };
 
     class StmtNode: public ASTNode {
@@ -53,19 +55,18 @@ namespace lyf {
     };
 
     class ExprNode: public StmtNode {
-        VarType type;
+        std::shared_ptr<VarType> type;
     public:
-        ExprNode(VarType &&var): type(var) {}
-        // ExprNode(VarType var): type(std::move(var)) {}
+        ExprNode(std::shared_ptr<VarType> var): type(std::move(var)) {}
         llvm::Value *codeGen() override;
         Json::Value jsonGen() override;
-        const VarType &getType() { return type; }
+        std::shared_ptr<VarType> getType() { return type; }
     };
 
     class ArrayInitExpr: public ExprNode {
-        std::vector<std::unique_ptr<ExprNode>> items;
+        std::vector<std::shared_ptr<ExprNode>> items;
     public:
-        ArrayInitExpr(std::vector<std::unique_ptr<ExprNode>> items, VarType type): items(std::move(items)), ExprNode(std::move(type)) {}
+        ArrayInitExpr(std::vector<std::shared_ptr<ExprNode>> items, std::shared_ptr<VarType> type): items(std::move(items)), ExprNode(std::move(type)) {}
         llvm::Value *codeGen() override;
         Json::Value jsonGen() override;
     };
@@ -78,9 +79,9 @@ namespace lyf {
     };
 
     class RetStmtNode: public StmtNode {
-        std::unique_ptr<ExprNode> expr;
+        std::shared_ptr<ExprNode> expr;
     public:
-        RetStmtNode(std::unique_ptr<ExprNode> child)
+        RetStmtNode(std::shared_ptr<ExprNode> child)
             : expr(std::move(child)) {}
         llvm::Value *codeGen() override;
         Json::Value jsonGen() override;
@@ -94,31 +95,56 @@ namespace lyf {
     };
 
     class VDeclStmtNode: public StmtNode {
-        VarType type;
+        std::shared_ptr<VarType> type;
         std::string name;
-        std::unique_ptr<ExprNode> initValue;
+        std::shared_ptr<ExprNode> initValue;
     public:
-        VDeclStmtNode(VarType type, const std::string &name, std::unique_ptr<ExprNode> initValue)
+        VDeclStmtNode(std::shared_ptr<VarType> type, const std::string &name, std::shared_ptr<ExprNode> initValue)
             : type(std::move(type)), name(name), initValue(std::move(initValue)) {}
         llvm::Value *codeGen() override;
         Json::Value jsonGen() override;
+        void mergeType(BaseType type, int pLevel) {
+            this->type->type = type;
+            std::vector<int> tmp(pLevel, 0);
+            tmp.insert(tmp.end(), this->type->dim.begin(), this->type->dim.end());
+            this->type->dim = std::move(tmp);
+        }
     };
-    
-    class CompdStmtNode: StmtNode {
-        std::vector<std::unique_ptr<StmtNode>> statements;
+
+    class VDecListStmtNode: public StmtNode {
+        std::vector<std::shared_ptr<VDeclStmtNode>> decls;
     public:
-        CompdStmtNode() {}
+        VDecListStmtNode(std::vector<std::shared_ptr<VDeclStmtNode>> decls)
+            : decls(std::move(decls)) {}
         llvm::Value *codeGen() override;
         Json::Value jsonGen() override;
+        void mergeType(BaseType type, int pLevel) {
+            for (auto &decl: decls) {
+                decl->mergeType(type, pLevel);
+            }
+        }
+        void push_dec(std::shared_ptr<VDeclStmtNode> decl) {
+            decls.push_back(std::move(decl));
+        }
+    };
+    
+    class CompdStmtNode: public StmtNode {
+        std::vector<std::shared_ptr<StmtNode>> statements;
+    public:
+        CompdStmtNode(std::vector<std::shared_ptr<StmtNode>> stmts)
+            : statements(std::move(stmts)) {}
+        llvm::Value *codeGen() override;
+        Json::Value jsonGen() override;
+        void push_item(std::shared_ptr<StmtNode> item) {
+            statements.push_back(std::move(item));
+        }
     };
 
     class VarExprNode: public ExprNode {
     private:
         std::string name;
     public:
-        VarExprNode(VarType type, const std::string &name)
-                : ExprNode(std::move(type)), name(name) {}
-        VarExprNode(VarType &&type, const std::string &name)
+        VarExprNode(std::shared_ptr<VarType> type, const std::string &name)
                 : ExprNode(std::move(type)), name(name) {}
         llvm::Value *codeGen() override;
         Json::Value jsonGen() override;
@@ -128,63 +154,63 @@ namespace lyf {
     class ConstExprNode: public ExprNode {
     protected:
         T value;
-        ConstExprNode(T v, VarType type): value(v), ExprNode(std::move(type)) {}
+        ConstExprNode(T v, std::shared_ptr<VarType> type): value(v), ExprNode(std::move(type)) {}
     };
 
     class ConstIntNode: public ConstExprNode<long> {
     public:
-        ConstIntNode(long v): ConstExprNode(v, VarType(INT, std::vector<int>())) {}
+        ConstIntNode(long v): ConstExprNode(v, std::make_shared<VarType>(INT, std::vector<int>())) {}
         llvm::Value *codeGen() override;
         Json::Value jsonGen() override;
     };
 
     class ConstFloatNode: public ConstExprNode<double> {
     public:
-        ConstFloatNode(double v): ConstExprNode(v, VarType(FLOAT, std::vector<int>())) {}
+        ConstFloatNode(double v): ConstExprNode(v, std::make_shared<VarType>(FLOAT, std::vector<int>())) {}
         llvm::Value *codeGen() override;
         Json::Value jsonGen() override;
     };
 
     class ConstCharNode: public ConstExprNode<char> {
     public:
-        ConstCharNode(char v): ConstExprNode(v, VarType(CHAR, std::vector<int>())) {}
+        ConstCharNode(char v): ConstExprNode(v, std::make_shared<VarType>(CHAR, std::vector<int>())) {}
         llvm::Value *codeGen() override;
         Json::Value jsonGen() override;
     };
 
-    class ConstStringNode: public ConstExprNode<char*> {
+    class ConstStringNode: public ConstExprNode<std::string> {
     public:
-        ConstStringNode(char* c): ConstExprNode(c, VarType(CHAR, std::vector<int>{0})) {}
-        llvm::Value *codeGen() override;
-        Json::Value jsonGen() override;
-    };
-
-    class UnaryExprNode: public ExprNode {
-        char op;
-        std::unique_ptr<ExprNode> child;
-    public:
-        UnaryExprNode(char op, std::unique_ptr<ExprNode> child, VarType type): op(op), child(std::move(child)), ExprNode(std::move(type)) {}
+        ConstStringNode(const std::string &c): ConstExprNode(c, std::make_shared<VarType>(CHAR, std::vector<int>{0})) {}
         llvm::Value *codeGen() override;
         Json::Value jsonGen() override;
     };
 
     class SubscriptExprNode: public ExprNode {
         int index;
-        std::unique_ptr<ExprNode> child;
+        std::shared_ptr<ExprNode> child;
     public:
-        SubscriptExprNode(int index, std::unique_ptr<ExprNode> child, VarType type)
+        SubscriptExprNode(int index, std::shared_ptr<ExprNode> child, std::shared_ptr<VarType> type)
             : index(index), child(std::move(child)), ExprNode(std::move(type)) {}
+        llvm::Value *codeGen() override;
+        Json::Value jsonGen() override;
+    };
+
+    class UnaryExprNode: public ExprNode {
+        std::string op;
+        std::shared_ptr<ExprNode> child;
+    public:
+        UnaryExprNode(const char *op, std::shared_ptr<ExprNode> child): op(op), child(std::move(child)), ExprNode(this->child->getType()) {}
         llvm::Value *codeGen() override;
         Json::Value jsonGen() override;
     };
 
     class BinaryExprNode: public ExprNode {
     private:
-        char op;
-        std::unique_ptr<ExprNode> lhs, rhs;
+        std::string op;
+        std::shared_ptr<ExprNode> lhs, rhs;
     public:
-        BinaryExprNode(char op, std::unique_ptr<ExprNode> lhs,
-                    std::unique_ptr<ExprNode> rhs, VarType type)
+        BinaryExprNode(const char *op, std::shared_ptr<ExprNode> lhs,
+                    std::shared_ptr<ExprNode> rhs, std::shared_ptr<VarType> type)
         : op(op), lhs(std::move(lhs)), rhs(std::move(rhs)), ExprNode(std::move(type)) {}
         llvm::Value *codeGen() override;
         Json::Value jsonGen() override;
@@ -192,55 +218,65 @@ namespace lyf {
 
     class CallExprAST : public ExprNode {
         std::string callee;
-        std::vector<std::pair<std::unique_ptr<ExprNode>, VarType>> args;
+        std::vector<std::shared_ptr<ExprNode>> args;
     public:
-        CallExprAST(const std::string &callee, std::vector<std::pair<std::unique_ptr<ExprNode>, VarType>> args, VarType type)
+        CallExprAST(const std::string &callee, std::vector<std::shared_ptr<ExprNode>> args, std::shared_ptr<VarType> type)
             : callee(callee), args(std::move(args)), ExprNode(std::move(type)) {}
+        void setCallee(const std::string &callee) {
+            this->callee = callee;
+        }
+        void push_arg(std::shared_ptr<ExprNode> arg) {
+            args.push_back(std::move(arg));
+        }
         llvm::Value *codeGen() override;
         Json::Value jsonGen() override;
     };
 
     class PrototypeNode: public ASTNode {
         std::string name;
-        std::vector<std::pair<std::string, VarType>> args;
+        std::shared_ptr<VarType> retType;
+        std::shared_ptr<VDecListStmtNode> args;
     public:
-        PrototypeNode(const std::string &name, std::vector<std::pair<std::string, VarType>> args)
-            : name(name), args(std::move(args)) {}
+        PrototypeNode(const std::string &name, std::shared_ptr<VDecListStmtNode> args, std::shared_ptr<VarType> retType)
+            : name(name), args(std::move(args)), retType(std::move(retType)) {}
         llvm::Value *codeGen() override;
         Json::Value jsonGen() override;
+        // void push_arg(std::shared_ptr<VDeclStmtNode> arg) {
+        //     args->push_dec(std::move(arg));
+        // }
         const std::string &getName() const { return name; }
     };
 
     class FunctionNode: public ASTNode {
-        std::unique_ptr<PrototypeNode> proto;
-        std::unique_ptr<ExprNode> body;
+        std::shared_ptr<PrototypeNode> proto;
+        std::shared_ptr<StmtNode> body;
     public:
-        FunctionNode(std::unique_ptr<PrototypeNode> proto,
-                    std::unique_ptr<ExprNode> body)
+        FunctionNode(std::shared_ptr<PrototypeNode> proto,
+                    std::shared_ptr<ExprNode> body)
             : proto(std::move(proto)), body(std::move(body)) {}
         llvm::Value *codeGen() override;
         Json::Value jsonGen() override;
     };
 
     class IfStmtNode: public StmtNode {
-        std::unique_ptr<StmtNode> then, otherw;
-        std::unique_ptr<ExprNode> cond;
+        std::shared_ptr<StmtNode> then, otherw;
+        std::shared_ptr<ExprNode> cond;
     public:
-        IfStmtNode(std::unique_ptr<ExprNode> cond, std::unique_ptr<StmtNode> then,
-                    std::unique_ptr<StmtNode> otherw)
+        IfStmtNode(std::shared_ptr<ExprNode> cond, std::shared_ptr<StmtNode> then,
+                    std::shared_ptr<StmtNode> otherw)
             : cond(std::move(cond)), then(std::move(then)), otherw(std::move(otherw)) {}
         llvm::Value *codeGen() override;
         Json::Value jsonGen() override;
     };
 
     class ForStmtNode: public StmtNode {
-        std::unique_ptr<StmtNode> start, body;
-        std::unique_ptr<CompdStmtNode> step;
-        std::unique_ptr<ExprNode> end;
+        std::shared_ptr<StmtNode> start, body;
+        std::shared_ptr<CompdStmtNode> step;
+        std::shared_ptr<ExprNode> end;
     public:
-        ForStmtNode(std::unique_ptr<StmtNode> start,
-                    std::unique_ptr<ExprNode> end, std::unique_ptr<CompdStmtNode> step,
-                    std::unique_ptr<StmtNode> body)
+        ForStmtNode(std::shared_ptr<StmtNode> start,
+                    std::shared_ptr<ExprNode> end, std::shared_ptr<CompdStmtNode> step,
+                    std::shared_ptr<StmtNode> body)
             : start(std::move(start)), end(std::move(end)),
             step(std::move(step)), body(std::move(body)) {}
         llvm::Value *codeGen() override;
@@ -248,10 +284,10 @@ namespace lyf {
     };
 
     class WhileStmtNode: public StmtNode {
-        std::unique_ptr<ExprNode> end;
-        std::unique_ptr<StmtNode> body;
+        std::shared_ptr<ExprNode> end;
+        std::shared_ptr<StmtNode> body;
     public:
-        WhileStmtNode(std::unique_ptr<ExprNode> end, std::unique_ptr<StmtNode> body)
+        WhileStmtNode(std::shared_ptr<ExprNode> end, std::shared_ptr<StmtNode> body)
             : end(std::move(end)), body(std::move(body)) {}
         llvm::Value *codeGen() override;
         Json::Value jsonGen() override;
