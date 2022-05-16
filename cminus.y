@@ -1,13 +1,13 @@
 %{
-    #include <stdio.h>
     #include "ast.hpp"
 
     int yylex(void);
     int yyparse(void);
     int yywrap(void);
-    void yyerror(const char *s)
-    {
-        printf("ERROR: %s\n", s);
+    int yyerror(std::string str)
+    { 
+        fprintf(stderr, "[ERROR] %s\n", str);
+        return 0;
     }
     int main() {
         yyparse();
@@ -92,7 +92,7 @@ funcProto   : retType ID LEFTP paramList RIGHTP
     $$ = std::make_shared<lyf::PrototypeNode>(
         lex_text,
         std::static_pointer_cast<lyf::VDecListStmtNode>($4),
-        std::static_pointer_cast<lyf::VarType>($1);
+        std::static_pointer_cast<lyf::VarType>($1)
     );
 }
             ;
@@ -142,13 +142,13 @@ baseType    : INT
 pointerType : pointerType STAR
 {
     auto tmp = std::static_pointer_cast<lyf::VarType>($1);
-    tmp->dim.push_back(0);
+    tmp->pLevel += 1;
     $$ = std::move(tmp);
 }
             | retBaseType STAR
 {
     auto tmp = std::static_pointer_cast<lyf::VarType>($1);
-    tmp->dim.push_back(0);
+    tmp->pLevel += 1;
     $$ = std::move(tmp);
 }
             ;
@@ -187,7 +187,7 @@ param       : type varName
     // $$ = std::move($2);
     auto type = std::static_pointer_cast<lyf::VarType>($1);
     auto varName = std::static_pointer_cast<lyf::VDeclStmtNode>($2);
-    varName->mergeType(type->type, type->dim.size());
+    varName->mergeType(type->type, type->pLevel);
     $$ = std::move(varName);
 }
             | %empty  
@@ -234,7 +234,7 @@ varDec      : type varList SEMI
 {
     auto tmp = std::static_pointer_cast<lyf::VDecListStmtNode>($2);
     auto type = std::static_pointer_cast<lyf::VarType>($1);
-    tmp->mergeType(type->type, type->dim.size());
+    tmp->mergeType(type->type, type->pLevel);
     $$=std::move(tmp);
 }
             ;
@@ -257,7 +257,7 @@ varList     : varList COMMA varInit
 // varInit: VDeclStmtNode
 varInit     : varName ASSIGN expression
 {
-    
+
 }
             | varName ASSIGN arrayInitList
             | varName
@@ -323,46 +323,472 @@ expStmt     : expression SEMI
     $$=nullptr;
 }                                                       
             ;
-expression  : expression ASSIGN exprOr                                    
+expression  : expression ASSIGN exprOr
+{
+    auto left = std::static_pointer_cast<lyf::ExprNode>($1);
+    auto right = std::static_pointer_cast<lyf::ExprNode>($3);
+    auto type1 = left->getType();
+    auto type2 = right->getType();
+    bool isPtr1 = type1->pLevel != 0 or type1->dim.size() != 0;
+    bool isPtr2 = type2->pLevel != 0 or type2->dim.size() != 0;
+    bool isVoid1 = type1->type==lyf::VOID and type1->pLevel==0 and type1->dim.size()==0;
+    bool isVoid2 = type2->type==lyf::VOID and type2->pLevel==0 and type2->dim.size()==0;
+    if (isVoid1 or isVoid2) {
+        throw lyf::CompileError("Void type is invalid.");
+    }
+    if (isPtr1 and isPtr2) {
+        if (!left->match(*right)) {
+            throw lyf::CompileError("Pointer type does not match.");
+        }
+    }
+    if (!left->left()) {
+        throw lyf::CompileError("Right value cannot be assigned!");
+    }
+    if ((isPtr1 and !isPtr2) or (isPtr2 and !isPtr1)) {
+        throw lyf::CompileError("Invalid assignment between pointer and non-pointer.");
+    }
+    auto type = std::make_shared<lyf::VarType> (type1);
+    $$ = std::make_shared<lyf::BinaryExprNode>(
+        "ASSIGN",
+        left,
+        right,
+        std::move(type)
+    )
+}                                    
             | exprOr
 {
     $$ =std::move($1);  
 }                                                        
             ;
-exprOr      : exprOr OR exprAnd                                         
+exprOr      : exprOr OR exprAnd 
+{
+    auto left = std::static_pointer_cast<lyf::ExprNode>($1);
+    auto right = std::static_pointer_cast<lyf::ExprNode>($3);
+    auto type1 = left->getType();
+    auto type2 = right->getType();
+    bool isVoid1 = type1->type==lyf::VOID and type1->pLevel==0 and type1->dim.size()==0;
+    bool isVoid2 = type2->type==lyf::VOID and type2->pLevel==0 and type2->dim.size()==0;
+    if (isVoid1 or isVoid2) {
+        throw lyf::CompileError("Void type is invalid.");
+    }
+    auto type = std::make_shared<lyf::VarType>(
+        lyf::INT,
+        std::vector<int>{}
+    );
+    $$ = std::make_shared<lyf::BinaryExprNode>(
+        "OR",
+        left,
+        right,
+        std::move(type)
+    );
+}                                        
             | exprAnd
 {
     $$ =std::move($1);  
 }                                                       
             ;
 exprAnd     : exprAnd AND exprCmp
+{
+    auto left = std::static_pointer_cast<lyf::ExprNode>($1);
+    auto right = std::static_pointer_cast<lyf::ExprNode>($3);
+    auto type1 = left->getType();
+    auto type2 = right->getType();
+    bool isVoid1 = type1->type==lyf::VOID and type1->pLevel==0 and type1->dim.size()==0;
+    bool isVoid2 = type2->type==lyf::VOID and type2->pLevel==0 and type2->dim.size()==0;
+    if (isVoid1 or isVoid2) {
+        throw lyf::CompileError("Void type is invalid.");
+    }
+    auto type = std::make_shared<lyf::VarType>(
+        lyf::INT,
+        std::vector<int>{}
+    );
+    $$ = std::make_shared<lyf::BinaryExprNode>(
+        "AND",
+        left,
+        right,
+        std::move(type)
+    );
+}
             | exprCmp
 {
     $$ =std::move($1);  
 }  
             ;
-exprCmp     : exprCmp GE exprAdd                                          
-            | exprCmp LE exprAdd                                          
+exprCmp     : exprCmp GE exprAdd
+{
+    auto left = std::static_pointer_cast<lyf::ExprNode>($1);
+    auto right = std::static_pointer_cast<lyf::ExprNode>($3);
+    auto type1 = left->getType();
+    auto type2 = right->getType();
+    bool isPtr1 = type1->pLevel != 0 or type1->dim.size() != 0;
+    bool isPtr2 = type2->pLevel != 0 or type2->dim.size() != 0;
+    bool isVoid1 = type1->type==lyf::VOID and type1->pLevel==0 and type1->dim.size()==0;
+    bool isVoid2 = type2->type==lyf::VOID and type2->pLevel==0 and type2->dim.size()==0;
+    if (isVoid1 or isVoid2) {
+        throw lyf::CompileError("Void type is invalid.");
+    }
+    if ((isPtr1 and !isPtr2) or (isPtr2 and !isPtr1)) {
+        throw lyf::CompileError("Pointer cannot be compared with non-pointer!");
+    }
+    if (isPtr1 and isPtr2) {
+        if (!left->match(*right)) {
+            throw lyf::CompileError("Pointer type does not match.");
+        }
+    }
+    auto type = std::make_shared<lyf::VarType>(
+        lyf::INT,
+        std::vector<int>{}
+    );
+    $$ = std::make_shared<lyf::BinaryExprNode>(
+        "GE",
+        left,
+        right,
+        std::move(type)
+    );
+}
+            | exprCmp LE exprAdd 
+{
+    auto left = std::static_pointer_cast<lyf::ExprNode>($1);
+    auto right = std::static_pointer_cast<lyf::ExprNode>($3);
+    auto type1 = left->getType();
+    auto type2 = right->getType();
+    bool isPtr1 = type1->pLevel != 0 or type1->dim.size() != 0;
+    bool isPtr2 = type2->pLevel != 0 or type2->dim.size() != 0;
+    bool isVoid1 = type1->type==lyf::VOID and type1->pLevel==0 and type1->dim.size()==0;
+    bool isVoid2 = type2->type==lyf::VOID and type2->pLevel==0 and type2->dim.size()==0;
+    if (isVoid1 or isVoid2) {
+        throw lyf::CompileError("Void type is invalid.");
+    }
+    if ((isPtr1 and !isPtr2) or (isPtr2 and !isPtr1)) {
+        throw lyf::CompileError"Pointer cannot be compared with non-pointer!");
+    }
+    if (isPtr1 and isPtr2) {
+        if (!left->match(*right)) {
+            throw lyf::CompileError("Pointer type does not match.");
+        }
+    }
+    auto type = std::make_shared<lyf::VarType>(
+        lyf::INT,
+        std::vector<int>{}
+    );
+    $$ = std::make_shared<lyf::BinaryExprNode>(
+        "LE",
+        left,
+        right,
+        std::move(type)
+    );
+}
             | exprCmp GT exprAdd
-            | exprCmp LT exprAdd                                          
-            | exprCmp EQUAL exprAdd                                       
-            | exprCmp NE exprAdd                                          
+{
+    auto left = std::static_pointer_cast<lyf::ExprNode>($1);
+    auto right = std::static_pointer_cast<lyf::ExprNode>($3);
+    auto type1 = left->getType();
+    auto type2 = right->getType();
+    bool isPtr1 = type1->pLevel != 0 or type1->dim.size() != 0;
+    bool isPtr2 = type2->pLevel != 0 or type2->dim.size() != 0;
+    bool isVoid1 = type1->type==lyf::VOID and type1->pLevel==0 and type1->dim.size()==0;
+    bool isVoid2 = type2->type==lyf::VOID and type2->pLevel==0 and type2->dim.size()==0;
+    if (isVoid1 or isVoid2) {
+        throw lyf::CompileError("Void type is invalid.");
+    }
+    if ((isPtr1 and !isPtr2) or (isPtr2 and !isPtr1)) {
+        throw lyf::CompileError("Pointer cannot be compared with non-pointer!");
+    }
+    if (isPtr1 and isPtr2) {
+        if (!left->match(*right)) {
+            throw lyf::CompileError("Pointer type does not match.");
+        }
+    }
+    auto type = std::make_shared<lyf::VarType>(
+        lyf::INT,
+        std::vector<int>{}
+    );
+    $$ = std::make_shared<lyf::BinaryExprNode>(
+        "GT",
+        left,
+        right,
+        std::move(type)
+    );
+}
+            | exprCmp LT exprAdd 
+{
+    auto left = std::static_pointer_cast<lyf::ExprNode>($1);
+    auto right = std::static_pointer_cast<lyf::ExprNode>($3);
+    auto type1 = left->getType();
+    auto type2 = right->getType();
+    bool isPtr1 = type1->pLevel != 0 or type1->dim.size() != 0;
+    bool isPtr2 = type2->pLevel != 0 or type2->dim.size() != 0;
+    bool isVoid1 = type1->type==lyf::VOID and type1->pLevel==0 and type1->dim.size()==0;
+    bool isVoid2 = type2->type==lyf::VOID and type2->pLevel==0 and type2->dim.size()==0;
+    if (isVoid1 or isVoid2) {
+        throw lyf::CompileError("Void type is invalid.");
+    }
+    if ((isPtr1 and !isPtr2) or (isPtr2 and !isPtr1)) {
+        throw lyf::CompileError("Pointer cannot be compared with non-pointer!");
+    }
+    if (isPtr1 and isPtr2) {
+        if (!left->match(*right)) {
+            throw lyf::CompileError("Pointer type does not match.");
+        }
+    }
+    auto type = std::make_shared<lyf::VarType>(
+        lyf::INT,
+        std::vector<int>{}
+    );
+    $$ = std::make_shared<lyf::BinaryExprNode>(
+        "LT",
+        left,
+        right,
+        std::move(type)
+    );
+}
+            | exprCmp EQUAL exprAdd 
+{
+    auto left = std::static_pointer_cast<lyf::ExprNode>($1);
+    auto right = std::static_pointer_cast<lyf::ExprNode>($3);
+    auto type1 = left->getType();
+    auto type2 = right->getType();
+    bool isPtr1 = type1->pLevel != 0 or type1->dim.size() != 0;
+    bool isPtr2 = type2->pLevel != 0 or type2->dim.size() != 0;
+    bool isVoid1 = type1->type==lyf::VOID and type1->pLevel==0 and type1->dim.size()==0;
+    bool isVoid2 = type2->type==lyf::VOID and type2->pLevel==0 and type2->dim.size()==0;
+    if (isVoid1 or isVoid2) {
+        throw lyf::CompileError("Void type is invalid.");
+    }
+    if ((isPtr1 and !isPtr2) or (isPtr2 and !isPtr1)) {
+        throw lyf::CompileError("Pointer cannot be compared with non-pointer!");
+    }
+    if (isPtr1 and isPtr2) {
+        if (!left->match(*right)) {
+            throw lyf::CompileError("Pointer type does not match.");
+        }
+    }
+    auto type = std::make_shared<lyf::VarType>(
+        lyf::INT,
+        std::vector<int>{}
+    );
+    $$ = std::make_shared<lyf::BinaryExprNode>(
+        "EQUAL",
+        left,
+        right,
+        std::move(type)
+    );
+}
+            | exprCmp NE exprAdd 
+{
+    auto left = std::static_pointer_cast<lyf::ExprNode>($1);
+    auto right = std::static_pointer_cast<lyf::ExprNode>($3);
+    auto type1 = left->getType();
+    auto type2 = right->getType();
+    bool isPtr1 = type1->pLevel != 0 or type1->dim.size() != 0;
+    bool isPtr2 = type2->pLevel != 0 or type2->dim.size() != 0;
+    bool isVoid1 = type1->type==lyf::VOID and type1->pLevel==0 and type1->dim.size()==0;
+    bool isVoid2 = type2->type==lyf::VOID and type2->pLevel==0 and type2->dim.size()==0;
+    if (isVoid1 or isVoid2) {
+        throw lyf::CompileError("Void type is invalid.");
+    }
+    if ((isPtr1 and !isPtr2) or (isPtr2 and !isPtr1)) {
+        throw lyf::CompileError("Pointer cannot be compared with non-pointer!");
+    }
+    if (isPtr1 and isPtr2) {
+        if (!left->match(*right)) {
+            throw lyf::CompileError("Pointer type does not match.");
+        }
+    }
+    auto type = std::make_shared<lyf::VarType>(
+        lyf::INT,
+        std::vector<int>{}
+    );
+    $$ = std::make_shared<lyf::BinaryExprNode>(
+        "NE",
+        left,
+        right,
+        std::move(type)
+    );
+}
             | exprAdd
 {
     $$ =std::move($1);  
 }                                                       
             ;
-exprAdd     : exprAdd PLUS exprMul                                    
-            | exprAdd MINUS exprMul                                       
+exprAdd     : exprAdd PLUS exprMul 
+{
+    auto left = std::static_pointer_cast<lyf::ExprNode>($1);
+    auto right = std::static_pointer_cast<lyf::ExprNode>($3);
+    auto type1 = left->getType();
+    auto type2 = right->getType();
+    bool isPtr1 = type1->pLevel != 0 or type1->dim.size() != 0;
+    bool isPtr2 = type2->pLevel != 0 or type2->dim.size() != 0;
+    bool isVoid1 = (type1->type==lyf::VOID) and ((type1->pLevel==0) or (type1->pLevel==1 and type1->dim.size()==0));
+    bool isVoid2 = (type2->type==lyf::VOID) and ((type2->pLevel==0) or (type2->pLevel==1 and type2->dim.size()==0));
+    if (isPtr1 and isPtr2) {
+        throw lyf::CompileError("Pointer cannot be added with pointer!");
+    }
+    if ((isPtr1 and type2->type == lyf::FLOAT) or (isPtr2 and type1->type == lyf::FLOAT)) {
+        throw lyf::CompileError("Pointer can't be added with FLOAT!");
+    }
+    if (isVoid1 or isVoid2) {
+        throw lyf::CompileError("void or void pointer can't be operated!");
+    }
+    auto type = std::make_shared<lyf::VarType>(
+        lyf::CHAR,
+        std::vector<int>{}
+    );
+    if (isPtr1) {
+        type->type = type1->type;
+        type->dim = type1->dim;
+        type->pLevel = type1->pLevel;
+    } else if (isPtr2) {
+        type->type = type2->type;
+        type->dim = type2->dim;
+        type->pLevel = type2->pLevel;
+    }
+    else if (type1->type == lyf::FLOAT or type2->type == lyf::FLOAT) {
+        type->type = lyf::FLOAT;
+    } else if (type1->type == lyf::INT or type2->type == lyf::INT) {
+        type->type = lyf::INT;
+    }
+    $$ = std::make_shared<lyf::BinaryExprNode>(
+        "PLUS",
+        left,
+        right,
+        std::move(type)
+    );
+}
+            | exprAdd MINUS exprMul                              
+{
+    auto left = std::static_pointer_cast<lyf::ExprNode>($1);
+    auto right = std::static_pointer_cast<lyf::ExprNode>($3);
+    auto type1 = left->getType();
+    auto type2 = right->getType();
+    bool isPtr1 = type1->pLevel != 0 or type1->dim.size() != 0;
+    bool isPtr2 = type2->pLevel != 0 or type2->dim.size() != 0;
+    bool isVoid1 = (type1->type==lyf::VOID) and ((type1->pLevel==0) or (type1->pLevel==1 and type1->dim.size()==0));
+    bool isVoid2 = (type2->type==lyf::VOID) and ((type2->pLevel==0) or (type2->pLevel==1 and type2->dim.size()==0));
+    if (isPtr2) {
+        throw lyf::CompileError("Arrays or pointers can't be subtrahend!");
+    }
+    if (isPtr1 and type2->type == lyf::FLOAT) {
+        throw lyf::CompileError("Subtracting can't be done between pointer and float!");
+    }
+    if (isVoid1 or isVoid2) {
+        throw lyf::CompileError("void or void pointer can't be operated!");
+    }
+    auto type = std::make_shared<lyf::VarType>(
+        lyf::CHAR,
+        std::vector<int>{}
+    );
+    if (isPtr1) {
+        type->type = type1->type;
+        type->dim = type1->dim;
+        type->pLevel = type1->pLevel;
+    } else if (type1->type == lyf::FLOAT or type2->type == lyf::FLOAT) {
+        type->type = lyf::FLOAT;
+    } else if (type1->type == lyf::INT or type2->type == lyf::INT) {
+        type->type = lyf::INT;
+    }
+    $$ = std::make_shared<lyf::BinaryExprNode>(
+        "MINUS",
+        left,
+        right,
+        std::move(type)
+    );
+}
             | exprMul
 {
     $$ =std::move($1);  
 }                                                       
             ;
-exprMul     : exprMul STAR exprUnaryOp                  
-            | exprMul DIV exprUnaryOp                   
+exprMul     : exprMul STAR exprUnaryOp 
+{
+    auto left = std::static_pointer_cast<lyf::ExprNode>($1);
+    auto right = std::static_pointer_cast<lyf::ExprNode>($3);
+    auto type1 = left->getType();
+    auto type2 = right->getType();
+    if ((type1->pLevel != 0 or type1->dim.size() != 0) or (type2->dim.size() != 0 or type2->pLevel != 0)) {
+        throw lyf::CompileError("MUL not allowed on array or pointer!");
+    }
+    if (type1->type == lyf::CHAR or type2->type == lyf::CHAR) {
+        throw lyf::CompileError("MUL not allowed on char!");
+    }
+    if (type1->type == lyf::VOID or type2->type == lyf::VOID) {
+        throw lyf::CompileError(std::cerr << "void or void pointer can't be operated!");
+    }
+    lyf::BaseType bType = lyf::INT;
+    if (type1->type == lyf::FLOAT or type2->type == lyf::FLOAT) {
+        bType = lyf::FLOAT;
+    }
+    auto type = std::make_shared<lyf::VarType>(
+        bType,
+        std::vector<int>{}
+    );
+    $$ = std::make_shared<lyf::BinaryExprNode>(
+        "STAR",
+        left,
+        right,
+        std::move(type)
+    );
+}
+            | exprMul DIV exprUnaryOp 
+{
+    auto left = std::static_pointer_cast<lyf::ExprNode>($1);
+    auto right = std::static_pointer_cast<lyf::ExprNode>($3);
+    auto type1 = left->getType();
+    auto type2 = right->getType();
+    if ((type1->pLevel != 0 or type1->dim.size() != 0) or (type2->dim.size() != 0 or type2->pLevel != 0)) {
+        throw lyf::CompileError("DIV not allowed on array or pointer!");
+    }
+    if (type1->type == lyf::CHAR or type2->type == lyf::CHAR) {
+        throw lyf::CompileError("DIV not allowed on char!");
+    }
+    if (type1->type == lyf::VOID or type2->type == lyf::VOID) {
+        throw lyf::CompileError("void or void pointer can't be operated!");
+    }
+    lyf::BaseType bType = lyf::INT;
+    if (type1->type == lyf::FLOAT or type2->type == lyf::FLOAT) {
+        bType = lyf::FLOAT;
+    }
+    auto type = std::make_shared<lyf::VarType>(
+        bType,
+        std::vector<int>{}
+    );
+    $$ = std::make_shared<lyf::BinaryExprNode>(
+        "DIV",
+        left,
+        right,
+        std::move(type)
+    );
+}
             | exprMul REM exprUnaryOp 
-
+{
+    auto left = std::static_pointer_cast<lyf::ExprNode>($1);
+    auto right = std::static_pointer_cast<lyf::ExprNode>($3);
+    auto type1 = left->getType();
+    auto type2 = right->getType();
+    if ((type1->pLevel != 0 or type1->dim.size() != 0) or (type2->dim.size() != 0 or type2->pLevel != 0)) {
+        throw lyf::CompileError("MOD not allowed on array or pointer!");
+    }
+    if (type1->type == lyf::CHAR or type2->type == lyf::CHAR) {
+        throw lyf::CompileError("MOD not allowed on char!");
+    }
+    if (type1->type == lyf::VOID or type2->type == lyf::VOID) {
+        throw lyf::CompileError("void or void pointer can't be operated!");
+    }
+    lyf::BaseType bType = lyf::INT;
+    if (type1->type == lyf::FLOAT or type2->type == lyf::FLOAT) {
+        bType = lyf::FLOAT;
+    }
+    auto type = std::make_shared<lyf::VarType>(
+        bType,
+        std::vector<int>{}
+    );
+    $$ = std::make_shared<lyf::BinaryExprNode>(
+        "REM",
+        left,
+        right,
+        std::move(type)
+    );
+}
             | exprUnaryOp
 {
     $$ =std::move($1);  

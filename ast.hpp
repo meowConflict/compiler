@@ -22,6 +22,15 @@
 #include <json/json.h>
 
 namespace lyf {
+    class CompileError: public std::exception {
+        std::string cont;
+    public:
+        CompileError(std::string cont): cont(cont) {}
+        const char*  what() const noexcept override {
+            return cont.c_str();
+        }
+    };
+
     enum BaseType {
         INT,
         FLOAT,
@@ -38,13 +47,76 @@ namespace lyf {
 
     struct VarType: public ASTNode {
         BaseType type;
+        int pLevel;
         std::vector<int> dim;
-        VarType(BaseType type, std::vector<int> dim)
-                : type(type), dim(std::move(dim)) {}
+        VarType(BaseType type, std::vector<int> dim, int pLevel=0)
+                : type(type), dim(std::move(dim)), pLevel(pLevel) {}
         VarType(const VarType &rhs): type(rhs.type) ,dim(rhs.dim) {}
         VarType(VarType &&rhs): type(rhs.type), dim(std::move(rhs.dim)) {}
         llvm::Value *codeGen() override;
         Json::Value jsonGen() override;
+        bool operator==(const VarType &that) {
+            bool ret = type == that.type and pLevel == that.pLevel and dim.size() == that.dim.size();
+            if (ret) {
+                for (int i=1; i<dim.size(); i+=1) {
+                    if (dim[i]!=that.dim[i]) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+        bool operator!=(const VarType &that) {
+            return not (*this==that);
+        }
+        bool match(const VarType &that) {
+            if (*this==that) {
+                return true;
+            }
+            // if (type != VOID and that.type != VOID) {
+            //     return false;
+            // }
+            // void**[][] -> int**[][]
+            if (dim.size() == that.dim.size()) {
+                for (int i=1; i<dim.size(); i++) {
+                    if (dim[i]!=that.dim[i]) {
+                        return false;
+                    }
+                }
+                return matchBase(that);
+            }
+            // int*** -> int**[]
+            if (type==that.type and pLevel==that.pLevel+1 and dim.size()==0 and that.dim.size() == 1) {
+                return true;
+            }
+            if (type==that.type and pLevel==that.pLevel-1 and dim.size()==1 and that.dim.size() == 0) {
+                return true;
+            }
+            // void* -> int[][]...
+            if (dim.size() != 0 and that.dim.size() == 0 and that.pLevel == 0 and that.type == VOID) {
+                return true;
+            }
+            if (that.dim.size() != 0 and dim.size() == 0 and pLevel == 0 and type == VOID) {
+                return true;
+            }
+            // void*** -> int**[]
+            if (dim.size()==1 and that.dim.size()==0 and that.pLevel<=pLevel+1 and that.pLevel>0 and that.type==VOID) {
+                return true;
+            }
+            if (that.dim.size()==1 and dim.size()==0 and pLevel<=pLevel+1 and pLevel>0 and type==VOID) {
+                return true;
+            }
+            return false;
+        }
+        bool matchBase(const VarType &that) {
+            if (type==VOID and pLevel != 0 and pLevel <= that.pLevel) {
+                return true;
+            }
+            if (that.type==VOID and that.pLevel != 0 and that.pLevel <= pLevel) {
+                return true;
+            }
+            return type==that.type and pLevel==that.pLevel;
+        }
     };
 
     class StmtNode: public ASTNode {
@@ -56,10 +128,16 @@ namespace lyf {
 
     class ExprNode: public StmtNode {
         std::shared_ptr<VarType> type;
+        bool isLeft;
     public:
-        ExprNode(std::shared_ptr<VarType> var): type(std::move(var)) {}
+        ExprNode(std::shared_ptr<VarType> var, bool isLeft = false): type(std::move(var)), isLeft(isLeft) {
+            if (type->dim.size() != 0) {
+                isLeft = false;
+            }
+        }
         llvm::Value *codeGen() override;
         Json::Value jsonGen() override;
+        bool left() { return isLeft; }
         std::shared_ptr<VarType> getType() { return type; }
     };
 
@@ -105,9 +183,7 @@ namespace lyf {
         Json::Value jsonGen() override;
         void mergeType(BaseType type, int pLevel) {
             this->type->type = type;
-            std::vector<int> tmp(pLevel, 0);
-            tmp.insert(tmp.end(), this->type->dim.begin(), this->type->dim.end());
-            this->type->dim = std::move(tmp);
+            this->type->pLevel = pLevel;
         }
     };
 
@@ -145,7 +221,7 @@ namespace lyf {
         std::string name;
     public:
         VarExprNode(std::shared_ptr<VarType> type, const std::string &name)
-                : ExprNode(std::move(type)), name(name) {}
+                : ExprNode(std::move(type), true), name(name) {}
         llvm::Value *codeGen() override;
         Json::Value jsonGen() override;
     };
@@ -180,7 +256,7 @@ namespace lyf {
 
     class ConstStringNode: public ConstExprNode<std::string> {
     public:
-        ConstStringNode(const std::string &c): ConstExprNode(c, std::make_shared<VarType>(CHAR, std::vector<int>{0})) {}
+        ConstStringNode(const std::string &c): ConstExprNode(c, std::make_shared<VarType>(CHAR, std::vector<int>{})) {}
         llvm::Value *codeGen() override;
         Json::Value jsonGen() override;
     };
@@ -252,7 +328,7 @@ namespace lyf {
         std::shared_ptr<StmtNode> body;
     public:
         FunctionNode(std::shared_ptr<PrototypeNode> proto,
-                    std::shared_ptr<ExprNode> body)
+                    std::shared_ptr<StmtNode> body)
             : proto(std::move(proto)), body(std::move(body)) {}
         llvm::Value *codeGen() override;
         Json::Value jsonGen() override;
