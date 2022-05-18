@@ -21,7 +21,7 @@
 //     std::shared_ptr<lyf::VarType> vtype;
 //     std::shared_ptr<std::pair<std::string, lyf::VarType>> var;
 //     std::shared_ptr<std::vector<std::pair<std::string, lyf::VarType>>> varL;
-//     std::shared_ptr<std::vector<int>> arrBr;
+//     std::shared_ptr<std::deque<int>> arrBr;
 //     std::shared_ptr<lyf::CompdStmtNode> cpdStmt;
 //     int iVal;
 //     double fVal;
@@ -113,7 +113,7 @@ retBaseType   : baseType
 {
     $$ = std::make_shared<lyf::VarType> (
         lyf::VOID,
-        std::vector<int>()
+        std::deque<int>()
     );
 }
             ;
@@ -121,21 +121,21 @@ baseType    : INT
 {
     $$ = std::make_shared<lyf::VarType> (
         lyf::INT,
-        std::vector<int>()
+        std::deque<int>()
     );
 }
             | FLOAT 
 {
     $$ = std::make_shared<lyf::VarType> (
         lyf::FLOAT,
-        std::vector<int>()
+        std::deque<int>()
     );
 }
             | CHAR 
 {
     $$ = std::make_shared<lyf::VarType> (
         lyf::CHAR,
-        std::vector<int>()
+        std::deque<int>()
     );
 }
             ;
@@ -220,7 +220,7 @@ arrayBrackets: arrayBrackets LEFTSB INTV RIGHTSB
 {
     $$ = std::make_shared<lyf::VarType> (
         lyf::INT,
-        std::vector<int>()
+        std::deque<int>()
     );
 }
 // compdStmt: CompdStmtNode
@@ -257,16 +257,49 @@ varList     : varList COMMA varInit
 // varInit: VDeclStmtNode
 varInit     : varName ASSIGN expression
 {
-
+    auto decl = std::static_pointer_cast<lyf::VDeclStmtNode> ($1);
+    auto exp = std::static_pointer_cast<lyf::ExprNode>($3);
+    decl->addInit(exp);
+    $$ = decl;
 }
             | varName ASSIGN arrayInitList
+{
+    auto decl = std::static_pointer_cast<lyf::VDeclStmtNode> ($1);
+    auto exp = std::static_pointer_cast<lyf::ExprNode>($3);
+    decl->addInit(exp);
+    $$ = decl;
+}
             | varName
+{
+    $$ = std::move($1);
+}
             ;
+// arrayInitList: ArrayInitExpr
 arrayInitList: LEFTB expList RIGHTB
+{
+    $$ = std::move($2);
+}
             | LEFTB RIGHTB
+{
+    $$ = nullptr;
+}
             ;
+// expList: ArrayInitExpr
 expList     : expList COMMA expression
+{
+    auto tmp = std::static_pointer_cast<lyf::ArrayInitExpr>($1);
+    tmp->add_item(std::static_pointer_cast<lyf::ExprNode>($3));
+    $$=tmp;
+}
             | expression
+{
+    auto tmp = std::static_pointer_cast<lyf::ExprNode> ($1);
+    auto type = std::make_shared<lyf::VarType>(*(tmp->getType()));
+    $$ = std::make_shared<lyf::ArrayInitExpr>(
+        std::vector<std::shared_ptr<lyf::ExprNode>>{tmp},
+        type
+    );
+}
             ;
 // stmtList: CompdStmtNode
 stmtList    : stmtList statement
@@ -337,7 +370,7 @@ expression  : expression ASSIGN exprOr
         throw lyf::CompileError("Void type is invalid.");
     }
     if (isPtr1 and isPtr2) {
-        if (!left->match(*right)) {
+        if (!type1->match(*type2)) {
             throw lyf::CompileError("Pointer type does not match.");
         }
     }
@@ -347,13 +380,13 @@ expression  : expression ASSIGN exprOr
     if ((isPtr1 and !isPtr2) or (isPtr2 and !isPtr1)) {
         throw lyf::CompileError("Invalid assignment between pointer and non-pointer.");
     }
-    auto type = std::make_shared<lyf::VarType> (type1);
+    auto type = std::make_shared<lyf::VarType> (*type1);
     $$ = std::make_shared<lyf::BinaryExprNode>(
         "ASSIGN",
         left,
         right,
         std::move(type)
-    )
+    );
 }                                    
             | exprOr
 {
@@ -373,7 +406,7 @@ exprOr      : exprOr OR exprAnd
     }
     auto type = std::make_shared<lyf::VarType>(
         lyf::INT,
-        std::vector<int>{}
+        std::deque<int>{}
     );
     $$ = std::make_shared<lyf::BinaryExprNode>(
         "OR",
@@ -400,7 +433,7 @@ exprAnd     : exprAnd AND exprCmp
     }
     auto type = std::make_shared<lyf::VarType>(
         lyf::INT,
-        std::vector<int>{}
+        std::deque<int>{}
     );
     $$ = std::make_shared<lyf::BinaryExprNode>(
         "AND",
@@ -431,13 +464,13 @@ exprCmp     : exprCmp GE exprAdd
         throw lyf::CompileError("Pointer cannot be compared with non-pointer!");
     }
     if (isPtr1 and isPtr2) {
-        if (!left->match(*right)) {
+        if (!type1->match(*type2)) {
             throw lyf::CompileError("Pointer type does not match.");
         }
     }
     auto type = std::make_shared<lyf::VarType>(
         lyf::INT,
-        std::vector<int>{}
+        std::deque<int>{}
     );
     $$ = std::make_shared<lyf::BinaryExprNode>(
         "GE",
@@ -460,16 +493,16 @@ exprCmp     : exprCmp GE exprAdd
         throw lyf::CompileError("Void type is invalid.");
     }
     if ((isPtr1 and !isPtr2) or (isPtr2 and !isPtr1)) {
-        throw lyf::CompileError"Pointer cannot be compared with non-pointer!");
+        throw lyf::CompileError("Pointer cannot be compared with non-pointer!");
     }
     if (isPtr1 and isPtr2) {
-        if (!left->match(*right)) {
+        if (!type1->match(*type2)) {
             throw lyf::CompileError("Pointer type does not match.");
         }
     }
     auto type = std::make_shared<lyf::VarType>(
         lyf::INT,
-        std::vector<int>{}
+        std::deque<int>{}
     );
     $$ = std::make_shared<lyf::BinaryExprNode>(
         "LE",
@@ -495,13 +528,13 @@ exprCmp     : exprCmp GE exprAdd
         throw lyf::CompileError("Pointer cannot be compared with non-pointer!");
     }
     if (isPtr1 and isPtr2) {
-        if (!left->match(*right)) {
+        if (!type1->match(*type2)) {
             throw lyf::CompileError("Pointer type does not match.");
         }
     }
     auto type = std::make_shared<lyf::VarType>(
         lyf::INT,
-        std::vector<int>{}
+        std::deque<int>{}
     );
     $$ = std::make_shared<lyf::BinaryExprNode>(
         "GT",
@@ -527,13 +560,13 @@ exprCmp     : exprCmp GE exprAdd
         throw lyf::CompileError("Pointer cannot be compared with non-pointer!");
     }
     if (isPtr1 and isPtr2) {
-        if (!left->match(*right)) {
+        if (!type1->match(*type2)) {
             throw lyf::CompileError("Pointer type does not match.");
         }
     }
     auto type = std::make_shared<lyf::VarType>(
         lyf::INT,
-        std::vector<int>{}
+        std::deque<int>{}
     );
     $$ = std::make_shared<lyf::BinaryExprNode>(
         "LT",
@@ -559,13 +592,13 @@ exprCmp     : exprCmp GE exprAdd
         throw lyf::CompileError("Pointer cannot be compared with non-pointer!");
     }
     if (isPtr1 and isPtr2) {
-        if (!left->match(*right)) {
+        if (!type1->match(*type2)) {
             throw lyf::CompileError("Pointer type does not match.");
         }
     }
     auto type = std::make_shared<lyf::VarType>(
         lyf::INT,
-        std::vector<int>{}
+        std::deque<int>{}
     );
     $$ = std::make_shared<lyf::BinaryExprNode>(
         "EQUAL",
@@ -591,13 +624,13 @@ exprCmp     : exprCmp GE exprAdd
         throw lyf::CompileError("Pointer cannot be compared with non-pointer!");
     }
     if (isPtr1 and isPtr2) {
-        if (!left->match(*right)) {
+        if (!type1->match(*type2)) {
             throw lyf::CompileError("Pointer type does not match.");
         }
     }
     auto type = std::make_shared<lyf::VarType>(
         lyf::INT,
-        std::vector<int>{}
+        std::deque<int>{}
     );
     $$ = std::make_shared<lyf::BinaryExprNode>(
         "NE",
@@ -632,7 +665,7 @@ exprAdd     : exprAdd PLUS exprMul
     }
     auto type = std::make_shared<lyf::VarType>(
         lyf::CHAR,
-        std::vector<int>{}
+        std::deque<int>{}
     );
     if (isPtr1) {
         type->type = type1->type;
@@ -676,7 +709,7 @@ exprAdd     : exprAdd PLUS exprMul
     }
     auto type = std::make_shared<lyf::VarType>(
         lyf::CHAR,
-        std::vector<int>{}
+        std::deque<int>{}
     );
     if (isPtr1) {
         type->type = type1->type;
@@ -712,7 +745,7 @@ exprMul     : exprMul STAR exprUnaryOp
         throw lyf::CompileError("MUL not allowed on char!");
     }
     if (type1->type == lyf::VOID or type2->type == lyf::VOID) {
-        throw lyf::CompileError(std::cerr << "void or void pointer can't be operated!");
+        throw lyf::CompileError("void or void pointer can't be operated!");
     }
     lyf::BaseType bType = lyf::INT;
     if (type1->type == lyf::FLOAT or type2->type == lyf::FLOAT) {
@@ -720,7 +753,7 @@ exprMul     : exprMul STAR exprUnaryOp
     }
     auto type = std::make_shared<lyf::VarType>(
         bType,
-        std::vector<int>{}
+        std::deque<int>{}
     );
     $$ = std::make_shared<lyf::BinaryExprNode>(
         "STAR",
@@ -750,7 +783,7 @@ exprMul     : exprMul STAR exprUnaryOp
     }
     auto type = std::make_shared<lyf::VarType>(
         bType,
-        std::vector<int>{}
+        std::deque<int>{}
     );
     $$ = std::make_shared<lyf::BinaryExprNode>(
         "DIV",
@@ -780,7 +813,7 @@ exprMul     : exprMul STAR exprUnaryOp
     }
     auto type = std::make_shared<lyf::VarType>(
         bType,
-        std::vector<int>{}
+        std::deque<int>{}
     );
     $$ = std::make_shared<lyf::BinaryExprNode>(
         "REM",
@@ -796,48 +829,100 @@ exprMul     : exprMul STAR exprUnaryOp
 // exprUnaryOp: UnaryExprNode
 exprUnaryOp : MINUS factor %prec UMINUS
 {
+    auto operand = std::static_pointer_cast<lyf::ExprNode>($2);
+    auto type = operand->getType();
+    auto cur_type = std::make_shared<lyf::VarType> (*type);
     $$ =std::make_shared<lyf::UnaryExprNode>(
         "UMINUS", 
-        std::static_pointer_cast<lyf::ExprNode>($2)
+        std::move(operand),
+        std::move(cur_type)
     );
 }                            
             | NOT factor
 {
+    auto operand = std::static_pointer_cast<lyf::ExprNode>($2);
+    auto type = operand->getType();
+    auto cur_type = std::make_shared<lyf::VarType> (*type);
     $$ =std::make_shared<lyf::UnaryExprNode>(
         "NOT", 
-        std::static_pointer_cast<lyf::ExprNode>($2)
+        std::move(operand),
+        std::move(cur_type)
     );
 }                               
             | STAR factor %prec USTAR
 {
+    auto operand = std::static_pointer_cast<lyf::ExprNode>($2);
+    auto type = operand->getType();
+    auto cur_type = std::make_shared<lyf::VarType> (*type);
+    if (type->dim.size()==0) {
+        if (type->pLevel==0) {
+            throw lyf::CompileError("Non-pointer cannot be dereferenced.");
+        } else {
+            cur_type->pLevel -= 1;
+        }
+    } else {
+        cur_type->dim.pop_front();
+    }
     $$ =std::make_shared<lyf::UnaryExprNode>(
         "USTAR",
-        std::static_pointer_cast<lyf::ExprNode>($2)
+        std::move(operand),
+        std::move(cur_type),
+        true
     );
 }                             
             | AMP factor 
 {
+    auto operand = std::static_pointer_cast<lyf::ExprNode>($2);
+    auto type = operand->getType();
+    auto cur_type = std::make_shared<lyf::VarType> (*type);
+    if (operand->left()) {
+        throw lyf::CompileError("Right value cannot be Addressed.");
+    }
+    cur_type->pLevel += 1;
     $$ =std::make_shared<lyf::UnaryExprNode>(
         "AMP", 
-        std::static_pointer_cast<lyf::ExprNode>($2)
+        std::move(operand),
+        std::move(cur_type)
     );
 }
             | factor
 {
     $$ = std::move($1);
 }     
-factor      : LEFTP expression RIGHTP                  
-            | var                                                         
-            | call                                                        
-            | CONF                                                        
+factor      : LEFTP expression RIGHTP 
+{
+    $$=std::move($2);
+}
+            | var
+{
+    $$=std::move($1);
+}
+            | call
+{
+    $$=std::move($1);
+}                                                        
+            | CONF 
+{
+    $$=std::move($1);
+}
             ;
+// var: ExprNode
 var         : var LEFTSB expression RIGHTSB
             | ID
+{
+    $$ = std::make_shared<lyf::VarExprNode>()
+}
             ;
 call        : ID LEFTP argList RIGHTP                                     
             | ID LEFTP RIGHTP                                             
             ;
-argList     : argList COMMA expression                                    
+// argList: CallExprNode
+argList     : argList COMMA expression
+{
+    auto tmp = std::static_pointer_cast<lyf::CallExprNode>($1);
+    tmp->push_arg(std::static_pointer_cast<lyf::ExprNode>($3));
+    $$=std::move(tmp);
+}
             | expression                                                  
             ;
 // CONF: ConstExprNode
