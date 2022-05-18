@@ -194,8 +194,11 @@ namespace lyf {
         void addInit(std::shared_ptr<ExprNode> initV) {
             initValue = std::move(initV);
         }
-        llvm::Type *getType() const {
+        std::shared_ptr<VarType> getType() const {
             return type;
+        }
+        std::string getName() const {
+            return name;
         }
     };
 
@@ -211,11 +214,17 @@ namespace lyf {
                 decl->mergeType(type, pLevel);
             }
         }
-        std::vector<llvm::Type*> getTypes() const {
-            std::vector<llvm::Type*> types;
+        std::vector<std::string> getNames() const {
+            std::vector<std::string> names;
             for (auto &decl: decls) {
-                auto type = decl->getType();
-                types.push_back(std::move(type));
+                names.push_back(decl->getName());
+            }
+            return std::move(names);
+        }
+        std::vector<std::shared_ptr<VarType>> getTypes() const {
+            std::vector<std::shared_ptr<VarType>> types;
+            for (auto &decl: decls) {
+                types.push_back(decl->getType());
             }
             return std::move(types);
         }
