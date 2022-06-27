@@ -4,25 +4,27 @@
     #define YYSTYPE std::shared_ptr<lyf::ASTNode>
     #include "cminus.y.h"
     std::string lex_text;
+    std::stack<std::string> lex_texts;
 %}
 
 
 %option noyywrap
 
-COMMENT     \/\*([^\*]|(\*)*[^\*/])*(\*)*\*\/
+COMMENT     \/\*([^\*]|(\*)*[^\*/])*(\*)*\*\/|\/\/[^\n]*
 ID          [a-zA-Z][a-zA-Z0-9]*
 
 INTV        0|[1-9][0-9]*
 FLOATV      [0-9]+\.[0-9]+
-CHARV       \'.\'|\'\\.\'
+CHARV       \'[^'\\]\'|\'\\.\'
 STRINGV     \"(\\.|[^"\\])*\"
-
+NULLPTR     nullptr
 
 %%
-{INTV}      {lex_text = yytext; return INTV;}
-{FLOATV}    {lex_text = yytext; return FLOATV;}
-{CHARV}     {lex_text = yytext; return CHARV;}
-{STRINGV}   {lex_text = yytext; return STRINGV;}
+{INTV}      {lex_texts.push(yytext); return INTV;}
+{FLOATV}    {lex_texts.push(yytext); return FLOATV;}
+{CHARV}     {lex_texts.push(yytext); return CHARV;}
+{STRINGV}   {lex_texts.push(yytext); return STRINGV;}
+{NULLPTR}   {return NULLPTR;}
 
 "if"        {return IF;}
 "else"      {return ELSE;}
@@ -36,7 +38,7 @@ STRINGV     \"(\\.|[^"\\])*\"
 "char"      {return CHAR;}
 "void"      {return VOID;}
 
-{ID}        {lex_text = yytext; return ID;}
+{ID}        {lex_texts.push(yytext); return ID;}
 
 "="         {return ASSIGN;}
 "+"         {return PLUS;}
